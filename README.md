@@ -11,6 +11,16 @@
 
 IMPORTANT : This project is still in the development and testing stages, licensing terms may be updated in the future. Please don't do any commercial usage currently.
 
+## Project Dependencies Guide
+
+[![Tokio](https://img.shields.io/badge/Tokio-FF6F30?style=for-the-badge&logo=tokio&logoColor=white)](https://github.com/tokio-rs/tokio)
+[![tokio-tungstenite](https://img.shields.io/badge/tokio_tungstenite-FF6F30?style=for-the-badge&logo=tokio&logoColor=white)](https://github.com/snapview/tokio-tungstenite)
+[![Julia](https://img.shields.io/badge/Julia-9558B2?style=for-the-badge&logo=julia&logoColor=white)](https://github.com/JuliaLang/julia)
+
+**[ for Dependencies Details please see the end of this README ]**
+
+Fomalhaut uses Tokio & tokio-tungstenite to build Asynchronous WebSocket. Tokio & tokio-tungstenite licensed under the MIT License.  
+
 ## WebSocket Framework ( v0.1 )
 
 Fomalhaut is organized as a Julia API layer + Rust transport core :
@@ -82,7 +92,7 @@ Reason: `Fomalhaut/src/Fomalhaut.jl` looks for the Rust dynamic library under :
 
 ### Do Rust build artifacts need to be copied?
 
-Yes. The compiled Rust dynamic library must exist on the target side:
+Yes. The compiled Rust dynamic library must exist on the target side :
 
 - Windows : `fomalhaut_rs.dll`
 - Linux : `libfomalhaut_rs.so`
@@ -94,3 +104,10 @@ You can either :
 - copy source and run `cargo build --release` again in the other project.
 
 If only `Fomalhaut/` is copied without Rust build output, `using Fomalhaut` can still load, but `start_server` and `send_frame!` will fail when trying to load the dynamic library.
+
+## Project Dependencies Details
+
+Tokio License : [https://github.com/tokio-rs/tokio/blob/master/LICENSE](https://github.com/tokio-rs/tokio/blob/master/LICENSE)
+<br>
+
+tokio-tungstenite License : [https://github.com/snapview/tokio-tungstenite/blob/master/LICENSE](https://github.com/snapview/tokio-tungstenite/blob/master/LICENSE)
