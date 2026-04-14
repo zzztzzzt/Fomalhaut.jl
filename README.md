@@ -13,8 +13,8 @@ IMPORTANT : This project is still in the development and testing stages, licensi
 
 ## Project Dependencies Guide
 
-[![Tokio](https://img.shields.io/badge/Tokio-FF6F30?style=for-the-badge&logo=tokio&logoColor=black)](https://github.com/tokio-rs/tokio)
-[![tokio-tungstenite](https://img.shields.io/badge/tokio_tungstenite-FF6F30?style=for-the-badge&logo=tokio&logoColor=black)](https://github.com/snapview/tokio-tungstenite)
+[![Tokio](https://img.shields.io/badge/Tokio-F04D23?style=for-the-badge&logo=tokio&logoColor=white)](https://github.com/tokio-rs/tokio)
+[![tokio-tungstenite](https://img.shields.io/badge/tokio_tungstenite-F04D23?style=for-the-badge&logo=tokio&logoColor=white)](https://github.com/snapview/tokio-tungstenite)
 [![Julia](https://img.shields.io/badge/Julia-9558B2?style=for-the-badge&logo=julia&logoColor=white)](https://github.com/JuliaLang/julia)
 
 **[ for Dependencies Details please see the end of this README ]**
