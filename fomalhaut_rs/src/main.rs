@@ -1,4 +1,4 @@
-use fomalhaut::{Frame, transport};
+use fomalhaut_rs::{Frame, transport};
 use tokio::sync::broadcast;
 
 #[tokio::main]
