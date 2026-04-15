@@ -6,7 +6,9 @@ include("AsciiArt.jl")
 export start_server, send_frame!, stop_server!
 export CONTENT_TYPE_FLOAT32_TENSOR, CONTENT_TYPE_JSON, CONTENT_TYPE_RGBA_FRAME
 
-greet() = print("Hello World!")
+export @stream
+
+const _streams = []
 
 # Cache the loaded dynamic library handle for repeated FFI calls
 const _rust_lib_path = Ref{Union{Nothing, String}}(nothing)
@@ -102,6 +104,12 @@ function _build_envelope_v1(
     return frame
 end
 
+macro stream(path, f)
+    return esc(quote
+        push!(Fomalhaut._streams, $f)
+    end)
+end
+
 """
 start_server(; host="127.0.0.1", port=8080, path="/")
 
@@ -153,6 +161,80 @@ function send_frame!(
     )
     _check_ffi_status(status, "send_frame!")
     return nothing
+end
+
+function send(data)
+    if data isa Array{Float32}
+        payload = reinterpret(UInt8, data) |> collect
+        return send_frame!(
+            payload;
+            content_type = CONTENT_TYPE_FLOAT32_TENSOR,
+        )
+
+    elseif data isa Array{UInt8}
+        return send_frame!(
+            data;
+            content_type = CONTENT_TYPE_RGBA_FRAME,
+        )
+
+    else
+        error("Unsupported data type: $(typeof(data))")
+    end
+end
+
+"""
+run(callback; fps=30, host="127.0.0.1", port=8080)
+
+High-level streaming API.
+User provides a callback that returns frame data.
+"""
+function run(callback; fps::Real=30, host="127.0.0.1", port::Integer=8080)
+    fps > 0 || error("fps must be > 0")
+
+    start_server(host=host, port=port)
+
+    interval = 1 / fps
+    start_time = time()
+    frame_index = 0
+
+    try
+        while true
+            frame_start = time()
+
+            ctx = (
+                time = frame_start - start_time,
+                frame = frame_index,
+            )
+
+            data = callback(ctx)
+
+            send(data)
+
+            frame_index += 1
+
+            elapsed = time() - frame_start
+            sleep(max(0.0, interval - elapsed))
+        end
+
+    catch err
+        @error "Fomalhaut.run loop error" exception=(err, catch_backtrace())
+        rethrow()
+
+    finally
+        try
+            stop_server!()
+        catch stop_err
+            @warn "Failed to stop server cleanly" exception=(stop_err, catch_backtrace())
+        end
+    end
+end
+
+function start(; fps=30, host="127.0.0.1", port=8080)
+    length(_streams) > 0 || error("No streams registered.")
+
+    run(fps=fps, host=host, port=port) do ctx
+        _streams[1](ctx)
+    end
 end
 
 """
