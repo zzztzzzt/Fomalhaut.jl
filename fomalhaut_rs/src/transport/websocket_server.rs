@@ -43,10 +43,23 @@ pub async fn run_until_shutdown(addr: &str, tx: FrameSender, mut shutdown_rx: on
 async fn handle_connection(stream: TcpStream, tx: FrameSender) {
     if let Ok(mut ws_stream) = accept_async(stream).await {
         let mut rx = tx.subscribe();
-        while let Ok(frame) = rx.recv().await {
-            let payload = Bytes::from((*frame).clone());
-            if ws_stream.send(Message::Binary(payload)).await.is_err() {
-                break;
+        
+        loop {
+            match rx.recv().await {
+                // Data received normally
+                Ok(frame) => {
+                    let payload = Bytes::from((*frame).clone());
+                    if ws_stream.send(Message::Binary(payload)).await.is_err() {
+                        break; // Only exit if the transmission fails ( connection drops )
+                    }
+                }
+                // Handling buffer overflow ( Lagged )
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    eprintln!("Client lagged by {} frames, skipping to latest.", n);
+                    continue; // Skip the old frames and continue trying to receive the latest ones
+                }
+                // Channel is closed
+                Err(_) => break,
             }
         }
     }
