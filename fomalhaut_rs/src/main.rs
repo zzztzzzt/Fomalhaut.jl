@@ -1,9 +1,3 @@
-use fomalhaut_rs::{Frame, transport};
-use tokio::sync::broadcast;
-
-#[tokio::main]
-async fn main() {
-    let (tx, _) = broadcast::channel::<Frame>(32);
-    // Binary frames should now come from Julia FFI ( `fmh_ws_send` ) in product mode
-    transport::websocket_server::run("127.0.0.1:8080", tx).await;
+fn main() {
+    eprintln!("Use Fomalhaut through Julia `serve(app; ...)` after building the Rust library.");
 }

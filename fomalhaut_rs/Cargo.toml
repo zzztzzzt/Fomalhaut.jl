@@ -13,7 +13,7 @@ name = "fomalhaut_cli"
 path = "src/main.rs"
 
 [dependencies]
-bytes = "1.11.1"
 futures-util = "0.3.32"
+libc = "0.2.177"
 tokio = { version = "1.51.1", features = ["full"] }
 tokio-tungstenite = "0.29.0"
