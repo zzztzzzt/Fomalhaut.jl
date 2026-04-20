@@ -11,12 +11,16 @@ use crate::transport::websocket;
 const HEADER_READ_LIMIT: usize = 64 * 1024;
 const BODY_READ_LIMIT: usize = 32 * 1024 * 1024;
 
-pub async fn run_until_shutdown(addr: &str, mut shutdown_rx: tokio::sync::oneshot::Receiver<()>) {
+pub async fn run_until_shutdown(addr: &str, shutdown_rx: tokio::sync::oneshot::Receiver<()>) {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("Failed to bind HTTP server");
     println!("Fomalhaut Server: http://{}", addr);
 
+    run_with_listener(listener, shutdown_rx).await;
+}
+
+pub async fn run_with_listener(listener: tokio::net::TcpListener, mut shutdown_rx: tokio::sync::oneshot::Receiver<()>) {
     loop {
         tokio::select! {
             _ = &mut shutdown_rx => {

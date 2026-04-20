@@ -359,7 +359,9 @@ function _start_ws_tasks!(app::App; fps::Real)
                 try
                     ctx = WebSocketContext(path, frame_start - start_time, frame_index)
                     data = handler(ctx)
-                    _send_ws_data(path, data)
+                    if data !== nothing
+                        _send_ws_data(path, data)
+                    end
                 catch err
                     @error "Fomalhaut websocket handler failed" path exception=(err, catch_backtrace())
                     break
@@ -397,23 +399,18 @@ function serve(app::App; host::AbstractString = "127.0.0.1", port::Integer = 808
 
     _server_running[] = true
     
-    server_task = Threads.@spawn begin
-        try
-            status = ccall(
-                (:fmh_server_start, _load_rust_lib()),
-                Cint,
-                (Ptr{UInt8}, Csize_t),
-                addr_bytes,
-                length(addr_bytes),
-            )
-            if status != 0 && status != 5 # 5 is already stopped
-                 @error "Rust server exited with error" status
-            end
-        catch err
-            @error "Error in Rust server task" exception=(err, catch_backtrace())
-        finally
-            _server_running[] = false
-        end
+    # Start Rust server ( now returns immediately after binding )
+    status = ccall(
+        (:fmh_server_start, _load_rust_lib()),
+        Cint,
+        (Ptr{UInt8}, Csize_t),
+        addr_bytes,
+        length(addr_bytes),
+    )
+    
+    if status != 0
+        _server_running[] = false
+        _check_ffi_status(status, "fmh_server_start")
     end
 
     _start_ws_tasks!(app; fps = fps)
@@ -421,6 +418,12 @@ function serve(app::App; host::AbstractString = "127.0.0.1", port::Integer = 808
     try
         while _server_running[]
             sleep(0.1)
+        end
+    catch err
+        if err isa InterruptException
+            @info "Interrupt received ( Ctrl-C / Break )"
+        else
+            rethrow(err)
         end
     finally
         if _server_running[]

@@ -36,24 +36,52 @@ pub extern "C" fn fmh_server_start(addr_ptr: *const u8, addr_len: usize) -> i32 
         let worker_addr = addr.clone();
 
         guard.shutdown_tx = Some(shutdown_tx);
-        drop(guard); // Release lock before blocking
+        drop(guard); // Release lock before spawning thread
 
-        let rt = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(err) => {
-                eprintln!("Failed to build tokio runtime: {}", err);
-                return FFI_ERR_RUNTIME;
-            }
-        };
+        // Use a channel to wait for the listener to bind before returning FFI_OK
+        let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
 
-        rt.block_on(async move {
-            transport::http_server::run_until_shutdown(&worker_addr, shutdown_rx).await;
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(err) => {
+                    let _ = tx.send(Err(format!("Failed to build tokio runtime: {}", err)));
+                    return;
+                }
+            };
+
+            rt.block_on(async move {
+                let listener = match tokio::net::TcpListener::bind(&worker_addr).await {
+                    Ok(l) => {
+                        let _ = tx.send(Ok(()));
+                        l
+                    }
+                    Err(err) => {
+                        let _ = tx.send(Err(format!("Failed to bind to {}: {}", worker_addr, err)));
+                        return;
+                    }
+                };
+
+                transport::http_server::run_with_listener(listener, shutdown_rx).await;
+            });
         });
 
-        FFI_OK
+        // Wait for bind success or failure (short timeout if needed, but recv is fine)
+        match rx.recv() {
+            Ok(Ok(_)) => FFI_OK,
+            Ok(Err(err)) => {
+                eprintln!("Server start error: {}", err);
+                // Clear shutdown_tx if bind failed
+                if let Ok(mut g) = state().lock() {
+                    g.shutdown_tx = None;
+                }
+                FFI_ERR_RUNTIME
+            }
+            Err(_) => FFI_ERR_RUNTIME,
+        }
     });
 
     match result {
@@ -72,6 +100,8 @@ pub extern "C" fn fmh_server_stop() -> i32 {
 
         if let Some(tx) = guard.shutdown_tx.take() {
             let _ = tx.send(());
+        } else {
+            println!("No shutdown_tx found ( server not running? )");
         }
 
         guard.http_routes.clear();
@@ -121,7 +151,9 @@ pub extern "C" fn fmh_ws_broadcast(
 
             match guard.ws_routes.get(path) {
                 Some(tx) => tx.clone(),
-                None => return FFI_ERR_INVALID_ROUTE,
+                None => {
+                    return FFI_ERR_INVALID_ROUTE;
+                }
             }
         };
 
