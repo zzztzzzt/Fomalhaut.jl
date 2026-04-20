@@ -23,7 +23,7 @@ Fomalhaut uses Tokio & tokio-tungstenite to build Asynchronous WebSocket. Tokio 
 
 ## WIP Project Fomalhaut
 
-### Usage `@websocket`
+### @websocket Example
 
 ```julia
 using Fomalhaut
@@ -49,7 +49,7 @@ end
 start_server()
 ```
 
-### Usage `@post`
+### @post Example
 
 ```julia
 using Fomalhaut
