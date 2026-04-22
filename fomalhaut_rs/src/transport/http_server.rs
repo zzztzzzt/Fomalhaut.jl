@@ -44,11 +44,14 @@ pub async fn run_with_listener(listener: tokio::net::TcpListener, mut shutdown_r
 }
 
 async fn handle_connection(mut stream: TcpStream) -> io::Result<()> {
-    let request_head = match peek_request_head(&stream).await? {
-        Some(head) => head,
-        None => {
+    let request_head = match peek_request_head(&stream).await {
+        Ok(Some(head)) => head,
+        Ok(None) => {
             write_simple_response(&mut stream, 400, "text/plain", b"Bad Request", None).await?;
             return Ok(());
+        }
+        Err(e) => {
+            return Err(e);
         }
     };
 
@@ -82,6 +85,17 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
         .await;
     }
 
+    // Basic GET support for health checks/connectivity
+    if request.method == "GET" && request.path == "/" {
+        return write_response(
+            &mut stream,
+            200,
+            "application/json",
+            br#"{"status":"running","engine":"Fomalhaut"}"#,
+            origin,
+        ).await;
+    }
+
     let resolution = {
         let guard = state()
             .lock()
@@ -93,19 +107,19 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
                     RouteResolution::Handler(*route)
                 }
                 None => {
-                    RouteResolution::Immediate(404, "Not Found")
+                    RouteResolution::Immediate(404, r#"{"error":"Not Found"}"#, "application/json")
                 }
             }
         } else if guard.http_routes.contains_key(&request.path) {
-            RouteResolution::Immediate(405, "Method Not Allowed")
+            RouteResolution::Immediate(405, r#"{"error":"Method Not Allowed"}"#, "application/json")
         } else {
-            RouteResolution::Immediate(404, "Not Found")
+            RouteResolution::Immediate(404, r#"{"error":"Not Found"}"#, "application/json")
         }
     };
 
     match resolution {
-        RouteResolution::Immediate(status, message) => {
-            write_simple_response(&mut stream, status, "text/plain", message.as_bytes(), origin).await?;
+        RouteResolution::Immediate(status, message, content_type) => {
+            write_simple_response(&mut stream, status, content_type, message.as_bytes(), origin).await?;
             Ok(())
         }
         RouteResolution::Handler(route) => {
@@ -128,7 +142,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
                     .await?;
                 }
                 Err(_) => {
-                    write_simple_response(&mut stream, 500, "text/plain", b"Handler failed", origin).await?;
+                    write_simple_response(&mut stream, 500, "application/json", br#"{"error":"Handler failed"}"#, origin).await?;
                 }
             }
 
@@ -278,14 +292,6 @@ fn serialize_headers(headers: &HashMap<String, String>) -> Vec<u8> {
     serialized
 }
 
-fn cors_origin(origin: Option<&str>) -> Option<&str> {
-    match origin {
-        Some("http://localhost:5173") => origin,
-        Some("http://localhost:3000") => origin,
-        _ => None,
-    }
-}
-
 async fn write_simple_response(
     stream: &mut TcpStream,
     status_code: u16,
@@ -301,28 +307,26 @@ async fn write_response(
     status_code: u16,
     content_type: &str,
     body: &[u8],
-    origin: Option<&str>,
+    _origin: Option<&str>,
 ) -> io::Result<()> {
     let status_text = reason_phrase(status_code);
-    let cors = cors_origin(origin);
-
+    
     let mut header = format!(
-        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n",
+        "HTTP/1.1 {} {}\r\n\
+         Server: Fomalhaut/0.2 (Rust/Julia)\r\n\
+         Content-Type: {}\r\n\
+         Content-Length: {}\r\n\
+         Connection: close\r\n",
         status_code,
         status_text,
         content_type,
         body.len(),
     );
 
-    if let Some(o) = cors {
-        header.push_str(&format!(
-            "Access-Control-Allow-Origin: {}\r\n\
-             Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n\
-             Access-Control-Allow-Headers: Content-Type\r\n\
-             Vary: Origin\r\n",
-            o
-        ));
-    }
+    header.push_str("Access-Control-Allow-Origin: *\r\n");
+    header.push_str("Access-Control-Allow-Methods: POST, GET, OPTIONS, PUT, DELETE\r\n");
+    header.push_str("Access-Control-Allow-Headers: Content-Type, Authorization, X-Custom-Header, X-Requested-With\r\n");
+    header.push_str("Vary: Origin\r\n");
 
     header.push_str("\r\n");
 
@@ -334,7 +338,11 @@ async fn write_response(
 fn reason_phrase(status_code: u16) -> &'static str {
     match status_code {
         200 => "OK",
+        201 => "Created",
+        204 => "No Content",
         400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
         500 => "Internal Server Error",
@@ -344,7 +352,7 @@ fn reason_phrase(status_code: u16) -> &'static str {
 
 enum RouteResolution {
     Handler(HttpRoute),
-    Immediate(u16, &'static str),
+    Immediate(u16, &'static str, &'static str),
 }
 
 struct RequestHead {

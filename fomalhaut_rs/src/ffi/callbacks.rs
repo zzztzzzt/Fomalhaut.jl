@@ -6,11 +6,11 @@ use crate::runtime::state::HttpRoute;
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FfiHttpResponse {
-    pub status_code: u16,
     pub body_ptr: *mut u8,
     pub body_len: usize,
     pub content_type_ptr: *mut u8,
     pub content_type_len: usize,
+    pub status_code: u16,
 }
 
 pub type HttpCallback = unsafe extern "C" fn(

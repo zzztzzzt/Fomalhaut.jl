@@ -1,10 +1,12 @@
 module Fomalhaut
 
 using Libdl
+using JSON
 include("AsciiArt.jl")
 
 export App, Request, WebSocketContext, serve, stop_server!, @post, @websocket
 export CONTENT_TYPE_FLOAT32_TENSOR, CONTENT_TYPE_JSON, CONTENT_TYPE_RGBA_FRAME
+export json
 
 const _rust_lib_path = Ref{Union{Nothing, String}}(nothing)
 const _ffi_ok = Cint(0)
@@ -25,6 +27,15 @@ struct Request
     headers::Dict{String, String}
     query::String
     body::Vector{UInt8}
+end
+
+"""
+    json(req::Request)
+Parse the request body as JSON using JSON.jl.
+"""
+function json(req::Request)
+    # Important : must use copy(req.body) because String() will destroy the passed Vector
+    return JSON.parse(String(copy(req.body)))
 end
 
 struct WebSocketContext
@@ -49,11 +60,11 @@ end
 Base.show(io::IO, app::App) = print(io, "Fomalhaut.App(http=$(length(app.http_routes)), ws=$(length(app.ws_routes)))")
 
 struct FFIHttpResponse
-    status_code::UInt16
     body_ptr::Ptr{UInt8}
     body_len::Csize_t
     content_type_ptr::Ptr{UInt8}
     content_type_len::Csize_t
+    status_code::UInt16
 end
 
 function _rust_lib_filename()
@@ -222,7 +233,7 @@ function _http_request_trampoline(
         app = _active_app_or_throw()
         method = String(copy(unsafe_wrap(Vector{UInt8}, method_ptr, Int(method_len))))
         path = String(copy(unsafe_wrap(Vector{UInt8}, path_ptr, Int(path_len))))
-                query = String(copy(unsafe_wrap(Vector{UInt8}, query_ptr, Int(query_len))))
+        query = String(copy(unsafe_wrap(Vector{UInt8}, query_ptr, Int(query_len))))
         headers_raw = String(copy(unsafe_wrap(Vector{UInt8}, headers_ptr, Int(headers_len))))
         body = copy(unsafe_wrap(Vector{UInt8}, body_ptr, Int(body_len)))
 
@@ -232,20 +243,36 @@ function _http_request_trampoline(
         end
 
         request = Request(method, path, _parse_headers(headers_raw), query, body)
-                response = handler(request)
-        response isa Tuple && length(response) == 2 || error("POST handler must return (Vector{UInt8}, content_type::String)")
 
-        response_body = response[1]
-        response_body isa Vector{UInt8} || error("POST handler response body must be Vector{UInt8}")
-        content_type = String(response[2])
+        handler_result = handler(request)
+        
+        res_body = UInt8[]
+        res_ct = "text/plain"
+        res_status = UInt16(200)
 
-        body_ptr_out, body_len_out = _malloc_copy(response_body)
-        ct_bytes = Vector{UInt8}(codeunits(content_type))
+        if handler_result isa Tuple
+            if length(handler_result) >= 2
+                res_body = handler_result[1]
+                res_ct = handler_result[2]
+                if length(handler_result) >= 3
+                    res_status = handler_result[3]
+                end
+            end
+        else
+            res_body = handler_result
+        end
+
+        # Force deep copy and convert to Vector{UInt8}
+        final_body = Vector{UInt8}(copy(res_body))
+        
+        body_ptr_out, body_len_out = _malloc_copy(final_body)
+        ct_bytes = Vector{UInt8}(codeunits(String(res_ct)))
         ct_ptr_out, ct_len_out = _malloc_copy(ct_bytes)
+
 
         unsafe_store!(
             response_out,
-            FFIHttpResponse(UInt16(200), body_ptr_out, body_len_out, ct_ptr_out, ct_len_out),
+            FFIHttpResponse(body_ptr_out, body_len_out, ct_ptr_out, ct_len_out, UInt16(res_status)),
         )
         return Cint(0)
     catch err
