@@ -74,6 +74,134 @@ end
 FMHUT.serve(app; port=8080)
 ```
 
+### **GET** Registrations
+
+run below to test `@FMHUT.get`
+
+( Front-end example is in this file too, just copy & paste it to browser console )
+
+`julia --project=. --threads=auto scripts/test_fmhut_get.jl`
+
+```julia
+import Fomalhaut as FMHUT
+
+app = FMHUT.App()
+
+@FMHUT.get app "/hello" (req) -> begin
+    response_text = "Hello from Fomalhaut GET endpoint!"
+    return (Vector{UInt8}(response_text), "text/plain", 200)
+end
+
+FMHUT.serve(app; port=8080)
+```
+
+### **DELETE** Registrations
+
+run below to test `@FMHUT.delete`
+
+( Front-end example is in this file too, just copy & paste it to browser console )
+
+`julia --project=. --threads=auto scripts/test_fmhut_delete.jl`
+
+```julia
+import Fomalhaut as FMHUT
+
+app = FMHUT.App()
+
+const MOCK_DB = Dict("user-123" => "Nora", "user-456" => "Alexander")
+
+@FMHUT.delete app "/delete-user" (req) -> begin
+    user_id = String(copy(req.body))
+    
+    if haskey(MOCK_DB, user_id)
+        delete!(MOCK_DB, user_id)
+        response_text = "User $user_id deleted successfully. Remaining user(s) : $(length(MOCK_DB))"
+        return (Vector{UInt8}(response_text), "text/plain", 200)
+    else
+        response_text = "Error : User $user_id not found."
+        return (Vector{UInt8}(response_text), "text/plain", 404)
+    end
+end
+
+FMHUT.serve(app; port=8080)
+```
+
+### **PUT** Registrations
+
+run below to test `@FMHUT.put`
+
+( Front-end example is in this file too, just copy & paste it to browser console )
+
+```julia
+import Fomalhaut as FMHUT
+
+app = FMHUT.App()
+
+const MOCK_DB = Dict("user-123" => "Nora", "user-456" => "Alexander")
+
+@FMHUT.put app "/replace-user" (req) -> begin
+    body_str = String(copy(req.body))
+    
+    parts = split(body_str, ":"; limit=2)
+    if length(parts) != 2
+        return (Vector{UInt8}("Error : Invalid body format. Expected 'ID:NewName'"), "text/plain", 400)
+    end
+    
+    user_id = parts[1]
+    new_name = parts[2]
+    
+    if haskey(MOCK_DB, user_id)
+        MOCK_DB[user_id] = new_name
+        response_text = "User $user_id replaced completely. New name : $new_name"
+        return (Vector{UInt8}(response_text), "text/plain", 200)
+    else
+        MOCK_DB[user_id] = new_name
+        response_text = "User $user_id created successfully with name : $new_name"
+        return (Vector{UInt8}(response_text), "text/plain", 201) # 201 Created
+    end
+end
+
+FMHUT.serve(app; port=8080)
+```
+
+### **PATCH** Registrations
+
+run below to test `@FMHUT.patch`
+
+( Front-end example is in this file too, just copy & paste it to browser console )
+
+```julia
+import Fomalhaut as FMHUT
+
+app = FMHUT.App()
+
+const MOCK_DB = Dict("user-123" => "Nora", "user-456" => "Alexander")
+
+@FMHUT.patch app "/update-user" (req) -> begin
+    body_str = String(copy(req.body))
+    
+    parts = split(body_str, ":"; limit=2)
+    if length(parts) != 2
+        return (Vector{UInt8}("Error : Invalid body format. Expected 'ID:NewName'"), "text/plain", 400)
+    end
+    
+    user_id = parts[1]
+    new_name = parts[2]
+    
+    if haskey(MOCK_DB, user_id)
+        old_name = MOCK_DB[user_id]
+        MOCK_DB[user_id] = new_name
+        
+        response_text = "User $user_id updated successfully. $old_name -> $new_name"
+        return (Vector{UInt8}(response_text), "text/plain", 200)
+    else
+        return (Vector{UInt8}("Error : User $user_id not found."), "text/plain", 404)
+    end
+end
+
+FMHUT.serve(app; port=8080)
+```
+
 ### **OPTIONS** Registrations
 
 run below to test `@FMHUT.options`
