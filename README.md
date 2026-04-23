@@ -25,7 +25,7 @@ Fomalhaut uses Tokio & tokio-tungstenite to build Asynchronous WebSocket. Tokio 
 
 ### **WebSocket** Registrations
 
-run below to test @FMHUT.websocket
+run below to test `@FMHUT.websocket`
 
 ( Front-end fetch usage is in this file too, just copy & paste it to browser console)
 
