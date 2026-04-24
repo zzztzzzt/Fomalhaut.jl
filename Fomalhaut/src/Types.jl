@@ -28,6 +28,7 @@ end
 mutable struct App
     http_routes::Dict{Tuple{String, String}, Function}
     ws_routes::Dict{String, Function}
+    native_routes::Dict{Tuple{String, String}, String}
     handler_refs::Vector{Any}
     ws_tasks::Vector{Task}
     id::Int
@@ -35,7 +36,14 @@ end
 
 function App()
     _active_app_id[] += 1
-    return App(Dict{Tuple{String, String}, Function}(), Dict{String, Function}(), Any[], Task[], _active_app_id[])
+    return App(
+        Dict{Tuple{String, String}, Function}(), 
+        Dict{String, Function}(), 
+        Dict{Tuple{String, String}, String}(),
+        Any[], 
+        Task[], 
+        _active_app_id[]
+    )
 end
 
 Base.show(io::IO, app::App) = print(io, "Fomalhaut.App(http=$(length(app.http_routes)), ws=$(length(app.ws_routes)))")

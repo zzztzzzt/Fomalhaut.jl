@@ -27,7 +27,7 @@ Fomalhaut provides first-class support for Sea ORM - powerful relational ORM for
 
 Fomalhaut provides first-class support for SakuraEngine.jl - the Template Engine for Julia.
 
-## WIP Project Fomalhaut
+## WebSocket & RESTful API Services
 
 ### **WebSocket** Registrations
 
@@ -234,6 +234,78 @@ end
 end
 
 FMHUT.serve(app; port=8080)
+```
+
+## Specialized Native Routes ( SeaORM )
+
+Fomalhaut supports specialized routes that bypass the Julia VM for maximum data throughput. These routes execute directly in the Rust layer using **SeaORM**.
+
+### Usage Example
+
+```julia
+import Fomalhaut as FMHUT
+using SearchLight, SearchLightSQLite
+using SearchLight.Migrations
+
+function create_demo_schema()
+    SearchLight.connect(
+        Dict(
+            "adapter" => "SQLite",
+            "database" => "fomalhaut_demo.db"
+        )
+    )
+
+    # Avoid duplicate creation
+    SearchLight.query("DROP TABLE IF EXISTS users")
+
+    SearchLight.Migrations.create_table(:users) do
+        [
+            SearchLight.Migrations.column(:id, :int, "PRIMARY KEY AUTOINCREMENT"),
+            SearchLight.Migrations.column(:name, :string),
+            SearchLight.Migrations.column(:email, :string)
+        ]
+    end
+
+    SearchLight.query("""
+        INSERT INTO users (name, email)
+        VALUES ('SearchLight User', 'sl@fomalhaut.io')
+    """)
+
+    println("SearchLight : Schema created and data seeded.")
+end
+
+app = FMHUT.App()
+
+create_demo_schema()
+
+# Fomalhaut connects to the same SQLite file ( used by Rust SeaORM )
+FMHUT.connect_db("sqlite://fomalhaut_demo.db")
+
+# Register Rust native routes
+@FMHUT.sea_get app "/api/users/:id" "users"
+
+println("Fomalhaut : Native SeaORM route registered")
+println("Server starting at http://127.0.0.1:8080")
+println("Test command: curl http://127.0.0.1:8080/api/users/1")
+
+FMHUT.serve(app; port=8080)
+```
+
+### Running the Workflow Test
+
+A complete workflow demonstrating Julia-side migration and Rust-side acceleration is provided:
+
+```bash
+# From project root
+julia --project=. scripts/test_sea_orm_workflow.jl
+```
+
+Verify the endpoint:
+```javascript
+fetch("http://127.0.0.1:8080/api/users/1")
+  .then(res => res.json())
+  .then(data => console.log("Native Route Result :", data))
+  .catch(err => console.error("Error:", err));
 ```
 
 ## Project Dependencies Details

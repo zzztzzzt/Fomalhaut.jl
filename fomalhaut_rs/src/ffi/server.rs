@@ -11,6 +11,64 @@ use crate::runtime::state::state;
 use crate::transport;
 
 #[unsafe(no_mangle)]
+pub extern "C" fn fmh_db_connect(url_ptr: *const u8, url_len: usize) -> i32 {
+    let result = std::panic::catch_unwind(|| {
+        if url_ptr.is_null() {
+            return FFI_ERR_NULL_PTR;
+        }
+
+        let url_bytes = unsafe { std::slice::from_raw_parts(url_ptr, url_len) };
+        let url = match std::str::from_utf8(url_bytes) {
+            Ok(v) => v.to_string(),
+            Err(_) => return FFI_ERR_INVALID_UTF8,
+        };
+
+        let (tx, rx) = std::sync::mpsc::channel::<Result<sea_orm::DatabaseConnection, sea_orm::DbErr>>();
+
+        let url_for_log = url.clone();
+
+        std::thread::spawn(move || {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(_) => {
+                    return;
+                }
+            };
+
+            rt.block_on(async move {
+                let conn = crate::database::connect(&url).await;
+                let _ = tx.send(conn);
+            });
+        });
+
+        match rx.recv() {
+            Ok(Ok(conn)) => {
+                let mut guard = match state().lock() {
+                    Ok(g) => g,
+                    Err(_) => return FFI_ERR_RUNTIME,
+                };
+                guard.db = Some(conn);
+                println!("Connected to database: {}", url_for_log);
+                FFI_OK
+            }
+            Ok(Err(err)) => {
+                eprintln!("Database connection error: {}", err);
+                FFI_ERR_RUNTIME
+            }
+            Err(_) => FFI_ERR_RUNTIME,
+        }
+    });
+
+    match result {
+        Ok(code) => code,
+        Err(_) => FFI_ERR_PANIC,
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn fmh_server_start(addr_ptr: *const u8, addr_len: usize) -> i32 {
     let result = std::panic::catch_unwind(|| {
         if addr_ptr.is_null() {

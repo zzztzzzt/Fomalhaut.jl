@@ -17,3 +17,6 @@ futures-util = "0.3.32"
 libc = "0.2.177"
 tokio = { version = "1.51.1", features = ["full"] }
 tokio-tungstenite = "0.29.0"
+sea-orm = { version = "2.0.0-rc", features = [ "sqlx-sqlite", "runtime-tokio-rustls", "macros" ] }
+lazy_static = "1.5.0"
+serde_json = "1.0"

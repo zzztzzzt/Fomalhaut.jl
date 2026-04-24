@@ -1,3 +1,4 @@
+pub mod database;
 pub mod ffi;
 pub mod protocol;
 pub mod runtime;

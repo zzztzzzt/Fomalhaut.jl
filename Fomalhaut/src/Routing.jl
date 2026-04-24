@@ -10,6 +10,12 @@ function register_http!(app::App, method::AbstractString, path::AbstractString, 
     return app
 end
 
+function register_sea_http!(app::App, method::AbstractString, path::AbstractString, entity::AbstractString)
+    normalized_method = uppercase(String(method))
+    app.native_routes[(normalized_method, String(_validate_path(path)))] = String(entity)
+    return app
+end
+
 # Methods wrappers
 function register_get!(app::App, path::AbstractString, handler::Function)
     return register_http!(app, "GET", path, handler)
@@ -80,5 +86,36 @@ end
 macro websocket(app, path, f)
     return esc(quote
         $(@__MODULE__).register_websocket!($app, $path, $f)
+    end)
+end
+
+# SeaORM Specialized Macros
+macro sea_get(app, path, entity)
+    return esc(quote
+        $(@__MODULE__).register_sea_http!($app, "GET", $path, $entity)
+    end)
+end
+
+macro sea_post(app, path, entity)
+    return esc(quote
+        $(@__MODULE__).register_sea_http!($app, "POST", $path, $entity)
+    end)
+end
+
+macro sea_put(app, path, entity)
+    return esc(quote
+        $(@__MODULE__).register_sea_http!($app, "PUT", $path, $entity)
+    end)
+end
+
+macro sea_patch(app, path, entity)
+    return esc(quote
+        $(@__MODULE__).register_sea_http!($app, "PATCH", $path, $entity)
+    end)
+end
+
+macro sea_delete(app, path, entity)
+    return esc(quote
+        $(@__MODULE__).register_sea_http!($app, "DELETE", $path, $entity)
     end)
 end

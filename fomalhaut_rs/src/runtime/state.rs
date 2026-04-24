@@ -21,6 +21,8 @@ unsafe impl Sync for HttpRoute {}
 pub struct ServerState {
     pub http_routes: HashMap<(String, String), HttpRoute>,
     pub ws_routes: HashMap<String, WsSender>,
+    pub native_routes: HashMap<(String, String), String>,
+    pub db: Option<sea_orm::DatabaseConnection>,
     pub shutdown_tx: Option<oneshot::Sender<()>>,
 }
 
@@ -29,6 +31,8 @@ impl ServerState {
         Self {
             http_routes: HashMap::new(),
             ws_routes: HashMap::new(),
+            native_routes: HashMap::new(),
+            db: None,
             shutdown_tx: None,
         }
     }

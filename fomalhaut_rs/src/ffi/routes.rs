@@ -97,6 +97,52 @@ pub extern "C" fn fmh_register_websocket(path_ptr: *const u8, path_len: usize) -
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn fmh_register_native_route(
+    method_ptr: *const u8,
+    method_len: usize,
+    path_ptr: *const u8,
+    path_len: usize,
+    entity_ptr: *const u8,
+    entity_len: usize,
+) -> i32 {
+    let result = std::panic::catch_unwind(|| {
+        if method_ptr.is_null() || path_ptr.is_null() || entity_ptr.is_null() {
+            return super::errors::FFI_ERR_NULL_PTR;
+        }
+
+        let method_bytes = unsafe { std::slice::from_raw_parts(method_ptr, method_len) };
+        let method = match std::str::from_utf8(method_bytes) {
+            Ok(v) if !v.is_empty() => v.to_ascii_uppercase(),
+            _ => return FFI_ERR_INVALID_ROUTE,
+        };
+
+        let path_bytes = unsafe { std::slice::from_raw_parts(path_ptr, path_len) };
+        let path = match std::str::from_utf8(path_bytes) {
+            Ok(v) if validate_path(v) => v.to_string(),
+            _ => return FFI_ERR_INVALID_ROUTE,
+        };
+
+        let entity_bytes = unsafe { std::slice::from_raw_parts(entity_ptr, entity_len) };
+        let entity = match std::str::from_utf8(entity_bytes) {
+            Ok(v) => v.to_string(),
+            _ => return FFI_ERR_INVALID_ROUTE,
+        };
+
+        let mut guard = match state().lock() {
+            Ok(g) => g,
+            Err(_) => return FFI_ERR_RUNTIME,
+        };
+        guard.native_routes.insert((method, path), entity);
+        FFI_OK
+    });
+
+    match result {
+        Ok(code) => code,
+        Err(_) => FFI_ERR_PANIC,
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn fmh_malloc(size: usize) -> *mut u8 {
     unsafe { libc::malloc(size) as *mut u8 }
 }

@@ -18,7 +18,7 @@ function _build_envelope_v1(
 end
 
 function _register_routes!(app::App)
-    for (method, path) in keys(app.http_routes)
+    for ((method, path), handler) in app.http_routes
         method_bytes = Vector{UInt8}(codeunits(method))
         path_bytes = Vector{UInt8}(codeunits(path))
         status = ccall(
@@ -33,6 +33,24 @@ function _register_routes!(app::App)
             C_NULL,
         )
         _check_ffi_status(status, "register_http $method $path")
+    end
+
+    for ((method, path), entity) in app.native_routes
+        method_bytes = Vector{UInt8}(codeunits(method))
+        path_bytes = Vector{UInt8}(codeunits(path))
+        entity_bytes = Vector{UInt8}(codeunits(entity))
+        status = ccall(
+            (:fmh_register_native_route, _load_rust_lib()),
+            Cint,
+            (Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t),
+            method_bytes,
+            length(method_bytes),
+            path_bytes,
+            length(path_bytes),
+            entity_bytes,
+            length(entity_bytes),
+        )
+        _check_ffi_status(status, "register_native_route $method $path -> $entity")
     end
 
     for path in keys(app.ws_routes)
@@ -128,9 +146,22 @@ function _stop_ws_tasks!(app::App)
     return nothing
 end
 
+function connect_db(url::AbstractString)
+    url_bytes = Vector{UInt8}(codeunits(url))
+    status = ccall(
+        (:fmh_db_connect, _load_rust_lib()),
+        Cint,
+        (Ptr{UInt8}, Csize_t),
+        url_bytes,
+        length(url_bytes),
+    )
+    _check_ffi_status(status, "connect_db $url")
+    return nothing
+end
+
 function serve(app::App; host::AbstractString = "127.0.0.1", port::Integer = 8080, fps::Real = 30)
     1 <= port <= 65535 || error("port must be in 1:65535")
-    (isempty(app.http_routes) && isempty(app.ws_routes)) && error("No routes registered on this App.")
+    (isempty(app.http_routes) && isempty(app.ws_routes) && isempty(app.native_routes)) && error("No routes registered on this App.")
     !_server_running[] || error("A Fomalhaut server is already running")
 
     addr = "$(host):$(port)"
