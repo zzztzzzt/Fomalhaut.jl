@@ -138,6 +138,8 @@ run below to test `@FMHUT.put`
 
 ( Front-end example is in this file too, just copy & paste it to browser console )
 
+`julia --project=. --threads=auto scripts/test_fmhut_put.jl`
+
 ```julia
 import Fomalhaut as FMHUT
 
@@ -175,6 +177,8 @@ FMHUT.serve(app; port=8080)
 run below to test `@FMHUT.patch`
 
 ( Front-end example is in this file too, just copy & paste it to browser console )
+
+`julia --project=. --threads=auto scripts/test_fmhut_patch.jl`
 
 ```julia
 import Fomalhaut as FMHUT
