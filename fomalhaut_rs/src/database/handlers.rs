@@ -6,6 +6,7 @@ pub async fn handle_native_request(
     db: DatabaseConnection,
     method: &str,
     path: &str,
+    query: &str,
     _body: Vec<u8>,
 ) -> Result<String, String> {
     let backend = db.get_database_backend();
@@ -30,9 +31,16 @@ pub async fn handle_native_request(
                     Err("Resource Not Found".to_string())
                 }
             } else {
+                // Parse pagination from query string
+                let limit = extract_query_param(query, "limit").and_then(|s| s.parse::<u64>().ok()).unwrap_or(100);
+                let offset = extract_query_param(query, "offset").and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+                
+                // Security cap : never allow more than 10000 items in one go
+                let safe_limit = std::cmp::min(limit, 10000);
+
                 let stmt = Statement::from_string(
                     backend,
-                    format!("SELECT * FROM {} LIMIT 100", table_name),
+                    format!("SELECT * FROM {} LIMIT {} OFFSET {}", table_name, safe_limit, offset),
                 );
                 let query_res = db.query_all_raw(stmt).await.map_err(|e| e.to_string())?;
 
@@ -66,6 +74,12 @@ fn extract_id(path: &str) -> Option<String> {
         .last()
         .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_numeric()))
         .map(|s| s.to_string())
+}
+
+fn extract_query_param<'a>(query: &'a str, key: &str) -> Option<&'a str> {
+    query.split('&')
+        .find(|part| part.starts_with(key) && part.contains('='))
+        .and_then(|part| part.split('=').nth(1))
 }
 
 /// Dynamic Row -> JSON conversion

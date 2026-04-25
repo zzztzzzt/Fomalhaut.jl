@@ -31,16 +31,20 @@ pub extern "C" fn fmh_register_http(
         };
 
         let path_bytes = unsafe { std::slice::from_raw_parts(path_ptr, path_len) };
-        let path = match std::str::from_utf8(path_bytes) {
+        let mut path = match std::str::from_utf8(path_bytes) {
             Ok(v) if validate_path(v) => v.to_string(),
             _ => return FFI_ERR_INVALID_ROUTE,
         };
+
+        if path.len() > 1 && path.ends_with('/') {
+            path.pop();
+        }
 
         let mut guard = match state().lock() {
             Ok(g) => g,
             Err(_) => return FFI_ERR_RUNTIME,
         };
-        guard.http_routes.insert((method, path), HttpRoute { callback, userdata });
+        guard.http_routes.insert((method.clone(), path.clone()), HttpRoute { callback, userdata });
         FFI_OK
     });
 
@@ -117,10 +121,14 @@ pub extern "C" fn fmh_register_native_route(
         };
 
         let path_bytes = unsafe { std::slice::from_raw_parts(path_ptr, path_len) };
-        let path = match std::str::from_utf8(path_bytes) {
+        let mut path = match std::str::from_utf8(path_bytes) {
             Ok(v) if validate_path(v) => v.to_string(),
             _ => return FFI_ERR_INVALID_ROUTE,
         };
+
+        if path.len() > 1 && path.ends_with('/') {
+            path.pop();
+        }
 
         let entity_bytes = unsafe { std::slice::from_raw_parts(entity_ptr, entity_len) };
         let entity = match std::str::from_utf8(entity_bytes) {
@@ -132,7 +140,7 @@ pub extern "C" fn fmh_register_native_route(
             Ok(g) => g,
             Err(_) => return FFI_ERR_RUNTIME,
         };
-        guard.native_routes.insert((method, path), entity);
+        guard.native_routes.insert((method.clone(), path.clone()), entity);
         FFI_OK
     });
 

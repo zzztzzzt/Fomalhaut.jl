@@ -49,37 +49,37 @@ end
 # Macros
 macro get(app, path, f)
     return esc(quote
-        $(@__MODULE__).register_get!($app, $path, $f)
+        $(@__MODULE__).register_get!($app, $path, (req) -> $f)
     end)
 end
 
 macro post(app, path, f)
     return esc(quote
-        $(@__MODULE__).register_post!($app, $path, $f)
+        $(@__MODULE__).register_post!($app, $path, (req) -> $f)
     end)
 end
 
 macro put(app, path, f)
     return esc(quote
-        $(@__MODULE__).register_put!($app, $path, $f)
+        $(@__MODULE__).register_put!($app, $path, (req) -> $f)
     end)
 end
 
 macro patch(app, path, f)
     return esc(quote
-        $(@__MODULE__).register_patch!($app, $path, $f)
+        $(@__MODULE__).register_patch!($app, $path, (req) -> $f)
     end)
 end
 
 macro delete(app, path, f)
     return esc(quote
-        $(@__MODULE__).register_delete!($app, $path, $f)
+        $(@__MODULE__).register_delete!($app, $path, (req) -> $f)
     end)
 end
 
 macro options(app, path, f)
     return esc(quote
-        $(@__MODULE__).register_options!($app, $path, $f)
+        $(@__MODULE__).register_options!($app, $path, (req) -> $f)
     end)
 end
 

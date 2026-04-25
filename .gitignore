@@ -3,3 +3,4 @@ Manifest.toml
 
 # Demo DB
 fomalhaut_demo.db
+benchmark_test.db

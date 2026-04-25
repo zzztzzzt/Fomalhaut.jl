@@ -169,8 +169,14 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
             .lock()
             .map_err(|_| io::Error::other("Runtime lock failed"))?;
 
-        let method = request.method.clone();
-        let path = request.path.clone();
+        let method = request.method.to_ascii_uppercase();
+        let mut path = request.path.clone();
+        
+        // Normalize path : remove trailing slash unless it's just "/"
+        if path.len() > 1 && path.ends_with('/') {
+            path.pop();
+        }
+
         let route_key = (method.clone(), path.clone());
 
         // 1. Try Exact Match
@@ -182,7 +188,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
             // 2. Try Parameter Match ( e.g., /api/users/:id )
             let mut found = None;
             
-            // Check Native Routes first for performance
+            // Check Native Routes
             for ((m, p), entity) in &guard.native_routes {
                 if m == &method && match_dynamic_path(p, &path) {
                     found = Some((RouteResolution::Native(entity.clone()), p.clone()));
@@ -191,6 +197,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
             }
 
             if found.is_none() {
+                // Check Julia Routes
                 for ((m, p), route) in &guard.http_routes {
                     if m == &method && match_dynamic_path(p, &path) {
                         found = Some((RouteResolution::Handler(*route), p.clone()));
@@ -201,10 +208,17 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
 
             if let Some(res) = found {
                 res
-            } else if guard.http_routes.keys().chain(guard.native_routes.keys()).any(|(_, p)| p == &path || match_dynamic_path(p, &path)) {
-                (RouteResolution::Immediate(405, r#"{"error":"Method Not Allowed"}"#.to_string(), "application/json"), path)
             } else {
-                (RouteResolution::Immediate(404, r#"{"error":"Not Found"}"#.to_string(), "application/json"), path)
+                // 3. Method Not Allowed or Not Found
+                let exists_on_other_method = guard.http_routes.keys()
+                    .chain(guard.native_routes.keys())
+                    .any(|(_, p)| p == &path || match_dynamic_path(p, &path));
+
+                if exists_on_other_method {
+                    (RouteResolution::Immediate(405, r#"{"error":"Method Not Allowed"}"#.to_string(), "application/json"), path)
+                } else {
+                    (RouteResolution::Immediate(404, r#"{"error":"Not Found"}"#.to_string(), "application/json"), path)
+                }
             }
         }
     };
@@ -240,9 +254,10 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
                 Some(conn) => {
                     let method = request.method.clone();
                     let path = request.path.clone();
+                    let query = request.query.clone();
                     let body = request.body.clone();
                     
-                    match crate::database::handlers::handle_native_request(&entity, conn, &method, &path, body).await {
+                    match crate::database::handlers::handle_native_request(&entity, conn, &method, &path, &query, body).await {
                         Ok(json_res) => {
                             write_response(
                                 &mut stream,
