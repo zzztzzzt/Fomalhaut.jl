@@ -38,9 +38,15 @@ FMHUT.connect_db("sqlite://fomalhaut_demo.db")
 
 # Register Rust native routes
 @FMHUT.sea_get app "/api/users/:id" "users"
+@FMHUT.sea_post app "/api/users" "users"
+@FMHUT.sea_put app "/api/users/:id" "users"
+@FMHUT.sea_patch app "/api/users/:id" "users"
+@FMHUT.sea_delete app "/api/users/:id" "users"
 
-println("Fomalhaut : Native SeaORM route registered")
+println("Fomalhaut : Native SeaORM routes registered")
 println("Server starting at http://127.0.0.1:8080")
-println("Test command : curl http://127.0.0.1:8080/api/users/1")
+println("Test GET command : curl http://127.0.0.1:8080/api/users/1")
+println("Test DELETE command : curl -X DELETE http://127.0.0.1:8080/api/users/1")
+println("Note: POST, PUT, PATCH are registered in Julia but not yet fully implemented in Rust backend.")
 
 FMHUT.serve(app; port=8080)

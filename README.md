@@ -155,7 +155,7 @@ Fomalhaut supports specialized routes that bypass the Julia VM for maximum data 
 Run this to see the performance difference between Julia-side-ORM-query and Rust-side-native-query :
 
 ```bash
-julia --project=. scripts/benchmark_sea_vs_julia.jl
+julia --project=. scripts/benchmark_sea_route_vs_julia.jl
 ```
 
 ### Running the Workflow Test
@@ -163,7 +163,7 @@ julia --project=. scripts/benchmark_sea_vs_julia.jl
 A complete workflow demonstrating Julia-side migration and Rust-side acceleration is provided :
 
 ```bash
-julia --project=. scripts/test_sea_orm_workflow.jl
+julia --project=. scripts/test_fmhut_sea_route.jl
 ```
 
 Verify the endpoint:
