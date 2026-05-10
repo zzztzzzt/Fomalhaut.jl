@@ -130,7 +130,7 @@ pub extern "C" fn fmh_server_start(addr_ptr: *const u8, addr_len: usize) -> i32 
         // Wait for bind success or failure (short timeout if needed, but recv is fine)
         match rx.recv() {
             Ok(Ok(_)) => {
-                println!("Started server process on http://{}", addr);
+                println!("☄️ ||||||  Started server process on http://{}  |||||| ☄️", addr);
 
                 FFI_OK
             },

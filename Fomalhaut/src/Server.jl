@@ -160,6 +160,12 @@ function connect_db(url::AbstractString)
 end
 
 function serve(app::App; host::AbstractString = "127.0.0.1", port::Integer = 8080, fps::Real = 30)
+    try
+        AsciiArt.print_fomalhaut_ascii_art()
+    catch err
+        @warn "Failed to show Fomalhaut ASCII art." exception = (err, catch_backtrace())
+    end
+
     1 <= port <= 65535 || error("port must be in 1:65535")
     (isempty(app.http_routes) && isempty(app.ws_routes) && isempty(app.native_routes)) && error("No routes registered on this App.")
     !_server_running[] || error("A Fomalhaut server is already running")
