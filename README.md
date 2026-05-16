@@ -74,20 +74,20 @@ app = FMHUT.App()
 # Mock Database
 const MOCK_DB = Dict("user-123" => "Nora", "user-456" => "Alexander")
 
-@FMHUT.get app "/hello" begin
+@FMHUT.get app "/v1/greetings/hello" begin
     response_text = "Hello from Fomalhaut GET endpoint!"
     return (Vector{UInt8}(response_text), "text/plain", 200)
 end
 
-@FMHUT.post app "/echo" begin
+@FMHUT.post app "/v1/echo" begin
     return (copy(req.body), "application/json", 201)
 end
 
-@FMHUT.options app "/echo" begin
+@FMHUT.options app "/v1/echo" begin
     return (UInt8[], "text/plain", 204)
 end
 
-@FMHUT.put app "/replace-user" begin
+@FMHUT.put app "/v1/users" begin
     body_str = String(copy(req.body))
     parts = split(body_str, ":"; limit=2)
     if length(parts) != 2
@@ -108,7 +108,7 @@ end
     end
 end
 
-@FMHUT.patch app "/update-user" begin
+@FMHUT.patch app "/v1/users" begin
     body_str = String(copy(req.body))
     parts = split(body_str, ":"; limit=2)
     if length(parts) != 2
@@ -128,7 +128,7 @@ end
     end
 end
 
-@FMHUT.delete app "/delete-user" begin
+@FMHUT.delete app "/v1/users" begin
     user_id = String(copy(req.body))
     
     if haskey(MOCK_DB, user_id)
@@ -198,11 +198,11 @@ create_demo_schema()
 FMHUT.connect_db("sqlite://fomalhaut_demo.db")
 
 # Register Rust native routes
-@FMHUT.sea_get app "/api/users/:id" "users"
-@FMHUT.sea_post app "/api/users" "users"
-@FMHUT.sea_put app "/api/users/:id" "users"
-@FMHUT.sea_patch app "/api/users/:id" "users"
-@FMHUT.sea_delete app "/api/users/:id" "users"
+@FMHUT.sea_get app "/api/v1/users/:id" "users"
+@FMHUT.sea_post app "/api/v1/users" "users"
+@FMHUT.sea_put app "/api/v1/users/:id" "users"
+@FMHUT.sea_patch app "/api/v1/users/:id" "users"
+@FMHUT.sea_delete app "/api/v1/users/:id" "users"
 
 println("Fomalhaut : Native SeaORM routes registered")
 println("Server starting at http://127.0.0.1:8080")

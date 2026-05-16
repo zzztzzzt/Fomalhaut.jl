@@ -27,7 +27,7 @@ app = FMHUT.App()
 FMHUT.connect_db("sqlite://$db_path")
 
 # [Path A] Standard Julia Route ( SearchLight -> JSON -> Rust -> Network )
-@FMHUT.get app "/julia/data" begin
+@FMHUT.get app "/v1/sensor-data/julia" begin
     data = SearchLight.query("SELECT * FROM sensor_data LIMIT 5000")
     rows = [Dict(String(col) => data[i, col] for col in names(data)) for i in 1:size(data, 1)]
     return Vector{UInt8}(JSON.json(rows)), "application/json"
@@ -35,7 +35,7 @@ end
 
 # [Path B] Native Rust Route ( SeaORM -> Rust -> Network )
 # Zero FFI overhead, Native JSON serialization
-@FMHUT.sea_get app "/rust/data" "sensor_data"
+@FMHUT.sea_get app "/api/v1/sensor-data" "sensor_data"
 
 # Run server in background task
 server_task = @async FMHUT.serve(app; port=8081)
@@ -63,16 +63,16 @@ end
 
 # Warmup Phase ( To eliminate Julia JIT overhead )
 println("Warming up JIT compiler...")
-HTTP.get("http://127.0.0.1:8081/julia/data")
-HTTP.get("http://127.0.0.1:8081/rust/data?limit=5000")
+HTTP.get("http://127.0.0.1:8081/v1/sensor-data/julia")
+HTTP.get("http://127.0.0.1:8081/api/v1/sensor-data?limit=5000")
 println("Warmup complete.\n")
 
 # Disable all Info logging for the actual benchmark runs
 global_logger(ConsoleLogger(stderr, Logging.Warn))
 
 try
-    julia_avg = run_benchmark("http://127.0.0.1:8081/julia/data", "Standard Julia Path")
-    rust_avg = run_benchmark("http://127.0.0.1:8081/rust/data?limit=5000", "Native Rust Path")
+    julia_avg = run_benchmark("http://127.0.0.1:8081/v1/sensor-data/julia", "Standard Julia Path")
+    rust_avg = run_benchmark("http://127.0.0.1:8081/api/v1/sensor-data?limit=5000", "Native Rust Path")
 
     speedup = julia_avg / rust_avg
 
