@@ -17,6 +17,7 @@ struct Request
     headers::Dict{String, String}
     query::String
     body::Vector{UInt8}
+    params::Dict{String, String} # Path parameters extracted from dynamic segments ( e.g. :id )
 end
 
 struct WebSocketContext

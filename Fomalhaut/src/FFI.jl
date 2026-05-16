@@ -99,6 +99,61 @@ function _active_app_or_throw()
     return app::App
 end
 
+"""
+    _match_dynamic_path(pattern, actual) -> Bool
+
+Check if `actual` path matches `pattern` that may contain `:param` segments.
+Example : _match_dynamic_path("/v1/users/:id", "/v1/users/user-123") -> true
+"""
+function _match_dynamic_path(pattern::String, actual::String)::Bool
+    p_parts = filter(!isempty, split(pattern, "/"))
+    a_parts = filter(!isempty, split(actual, "/"))
+    length(p_parts) != length(a_parts) && return false
+    return all(((p, a),) -> startswith(p, ":") || p == a, zip(p_parts, a_parts))
+end
+
+"""
+    _extract_path_params(pattern, actual) -> Dict{String, String}
+
+Extract dynamic segment values from `actual` path given a `pattern`.
+Example : _extract_path_params("/v1/users/:id", "/v1/users/user-123") -> Dict("id" => "user-123")
+"""
+function _extract_path_params(pattern::String, actual::String)::Dict{String, String}
+    params = Dict{String, String}()
+    p_parts = filter(!isempty, split(pattern, "/"))
+    a_parts = filter(!isempty, split(actual, "/"))
+    for (p, a) in zip(p_parts, a_parts)
+        if startswith(p, ":")
+            params[p[2:end]] = a   # strip the leading ':'
+        end
+    end
+    return params
+end
+
+"""
+    _find_handler_with_params(app, method, path) -> (handler | nothing, params)
+
+Look up the handler for `(method, path)` with two-phase matching :
+1. Exact match  — O(1), no allocation
+2. Dynamic scan — checks registered patterns for `:param` segments
+"""
+function _find_handler_with_params(app::App, method::String, path::String)
+    # Phase 1 : Exact match ( most common case, zero overhead )
+    handler = get(app.http_routes, (method, path), nothing)
+    if handler !== nothing
+        return handler, Dict{String, String}()
+    end
+
+    # Phase 2 : Dynamic pattern scan
+    for ((m, pattern), h) in app.http_routes
+        if m == method && _match_dynamic_path(pattern, path)
+            return h, _extract_path_params(pattern, path)
+        end
+    end
+
+    return nothing, Dict{String, String}()
+end
+
 function _http_request_trampoline(
     userdata::Ptr{Cvoid},
     method_ptr::Ptr{UInt8},
@@ -121,12 +176,12 @@ function _http_request_trampoline(
         headers_raw = String(copy(unsafe_wrap(Vector{UInt8}, headers_ptr, Int(headers_len))))
         body = copy(unsafe_wrap(Vector{UInt8}, body_ptr, Int(body_len)))
 
-        handler = get(app.http_routes, (method, path), nothing)
+        handler, path_params = _find_handler_with_params(app, method, path)
         if handler === nothing
             return Cint(9)
         end
 
-        request = Request(method, path, _parse_headers(headers_raw), query, body)
+        request = Request(method, path, _parse_headers(headers_raw), query, body, path_params)
 
         handler_result = handler(request)
         
