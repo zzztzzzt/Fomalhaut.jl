@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use tokio::sync::{broadcast, oneshot};
+use tokio::sync::{oneshot, watch};
 
 use crate::ffi::callbacks::HttpCallback;
 
 pub type WsFrame = Arc<Vec<u8>>;
-pub type WsSender = broadcast::Sender<WsFrame>;
+pub type WsSender = watch::Sender<WsFrame>;
 
 #[derive(Clone, Copy)]
 pub struct HttpRoute {

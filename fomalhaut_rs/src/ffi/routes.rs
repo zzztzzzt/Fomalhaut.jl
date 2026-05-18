@@ -1,6 +1,6 @@
 use std::ffi::c_void;
 
-use tokio::sync::broadcast;
+
 
 use super::callbacks::HttpCallback;
 use super::errors::{FFI_ERR_INVALID_ROUTE, FFI_ERR_PANIC, FFI_ERR_RUNTIME, FFI_OK};
@@ -89,7 +89,7 @@ pub extern "C" fn fmh_register_websocket(path_ptr: *const u8, path_len: usize) -
             Err(_) => return FFI_ERR_RUNTIME,
         };
 
-        let (tx, _) = broadcast::channel::<WsFrame>(1024);
+        let (tx, _) = tokio::sync::watch::channel::<WsFrame>(std::sync::Arc::new(Vec::new()));
         guard.ws_routes.insert(path, tx);
         FFI_OK
     });

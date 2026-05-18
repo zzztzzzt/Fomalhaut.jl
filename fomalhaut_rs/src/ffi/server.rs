@@ -205,21 +205,21 @@ pub extern "C" fn fmh_ws_broadcast(
             return FFI_ERR_INVALID_FRAME;
         }
 
-        let tx = {
+        {
             let guard = match state().lock() {
                 Ok(g) => g,
                 Err(_) => return FFI_ERR_RUNTIME,
             };
 
             match guard.ws_routes.get(path) {
-                Some(tx) => tx.clone(),
+                Some(tx) => {
+                    let _ = tx.send(Arc::new(frame.to_vec()));
+                }
                 None => {
                     return FFI_ERR_INVALID_ROUTE;
                 }
             }
-        };
-
-        let _ = tx.send(Arc::new(frame.to_vec()));
+        }
         FFI_OK
     });
 
