@@ -1,6 +1,17 @@
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement, Value};
 use serde_json::{json, Value as JsonValue, Map};
 
+// Identifier validation : Only alphanumeric characters and underscores are allowed
+fn validate_identifier(name: &str) -> Result<&str, String> {
+    if name.is_empty() {
+        return Err("Identifier cannot be empty".to_string());
+    }
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+        return Err(format!("Invalid identifier '{}'", name));
+    }
+    Ok(name)
+}
+
 pub async fn handle_native_request(
     table_name: &str,
     db: DatabaseConnection,
@@ -9,6 +20,8 @@ pub async fn handle_native_request(
     query: &str,
     _body: Vec<u8>,
 ) -> Result<String, String> {
+    validate_identifier(table_name)?;
+
     let backend = db.get_database_backend();
 
     match method {
@@ -78,7 +91,7 @@ pub async fn handle_native_request(
             let mut placeholders = Vec::new();
 
             for (k, v) in obj {
-                keys.push(k.clone());
+                keys.push(validate_identifier(k)?.to_string());
                 values.push(json_to_value(v.clone()));
                 placeholders.push("?");
             }
@@ -109,7 +122,7 @@ pub async fn handle_native_request(
             let mut values = Vec::new();
 
             for (k, v) in obj {
-                set_clauses.push(format!("{} = ?", k));
+                set_clauses.push(format!("{} = ?", validate_identifier(k)?));
                 values.push(json_to_value(v.clone()));
             }
 
