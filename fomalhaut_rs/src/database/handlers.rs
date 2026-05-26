@@ -1,7 +1,7 @@
 //! Manually Validated by zzztzzzt-SakuraAxis 2026-05-26
 
-use sea_orm::{ConnectionTrait, DatabaseConnection, Statement, Value};
-use serde_json::{json, Value as JsonValue, Map};
+use sea_orm::{ConnectionTrait, DatabaseConnection, Statement, Value, FromQueryResult};
+use serde_json::{json, Value as JsonValue};
 
 fn validate_identifier(name: &str) -> Result<&str, String> {
     if name.is_empty() {
@@ -167,42 +167,10 @@ fn extract_query_param<'a>(query: &'a str, key: &str) -> Option<&'a str> {
 
 /// Dynamic Row -> JSON conversion
 fn row_to_json(row: sea_orm::QueryResult) -> Result<JsonValue, String> {
-    let mut map = Map::new();
-    
-    for col in row.column_names() {
-        let value = column_to_json(&row, &col);
-        map.insert(col, value);
-    }
-
-    Ok(JsonValue::Object(map))
-}
-
-fn column_to_json(row: &sea_orm::QueryResult, col: &str) -> JsonValue {
-    if let Ok(Some(v)) = row.try_get::<Option<JsonValue>>("", col) {
-        return v;
-    }
-
-    if let Ok(Some(v)) = row.try_get::<Option<i64>>("", col) {
-        return json!(v);
-    }
-
-    if let Ok(Some(v)) = row.try_get::<Option<f64>>("", col) {
-        return json!(v);
-    }
-
-    if let Ok(Some(v)) = row.try_get::<Option<String>>("", col) {
-        return json!(v);
-    }
-
-    if let Ok(Some(v)) = row.try_get::<Option<bool>>("", col) {
-        return json!(v);
-    }
-
-    if let Ok(Some(v)) = row.try_get::<Option<Vec<u8>>>("", col) {
-        return json!(v);
-    }
-
-    JsonValue::Null
+    let json_value = JsonValue::from_query_result(&row, "")
+        .map_err(|e| e.to_string())?;
+        
+    Ok(json_value)
 }
 
 fn json_to_value(v: JsonValue) -> Value {
