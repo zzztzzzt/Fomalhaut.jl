@@ -606,11 +606,19 @@ fn allowed_methods_for_path(path: &str) -> io::Result<Option<String>> {
         .lock()
         .map_err(|_| io::Error::other("Runtime lock failed"))?;
 
+    let normalized = if path.len() > 1 && path.ends_with('/') {
+        path.trim_end_matches('/').to_string()
+    } else {
+        path.to_string()
+    };
+
     let mut methods: Vec<String> = guard
         .http_routes
         .keys()
         .chain(guard.native_routes.keys())
-        .filter(|(_, route_path)| route_path == path || match_dynamic_path(route_path, path))
+        .filter(|(_, route_path)| {
+            route_path == &normalized || match_dynamic_path(route_path, &normalized)
+        })
         .map(|(method, _)| method.clone())
         .collect();
 
