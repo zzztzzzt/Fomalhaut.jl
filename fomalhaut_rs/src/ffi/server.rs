@@ -34,7 +34,7 @@ pub extern "C" fn fmh_set_allowed_origins(origins_ptr: *const u8, origins_len: u
             .map(str::to_string)
             .collect();
 
-        let mut guard = match state().lock() {
+        let mut guard = match state().write() {
             Ok(g) => g,
             Err(_) => return FFI_ERR_RUNTIME,
         };
@@ -84,7 +84,7 @@ pub extern "C" fn fmh_db_connect(url_ptr: *const u8, url_len: usize) -> i32 {
 
         match rx.recv() {
             Ok(Ok(conn)) => {
-                let mut guard = match state().lock() {
+                let mut guard = match state().write() {
                     Ok(g) => g,
                     Err(_) => return FFI_ERR_RUNTIME,
                 };
@@ -119,7 +119,7 @@ pub extern "C" fn fmh_server_start(addr_ptr: *const u8, addr_len: usize) -> i32 
             Err(_) => return FFI_ERR_INVALID_UTF8,
         };
 
-        let mut guard = match state().lock() {
+        let mut guard = match state().write() {
             Ok(g) => g,
             Err(_) => return FFI_ERR_RUNTIME,
         };
@@ -175,7 +175,7 @@ pub extern "C" fn fmh_server_start(addr_ptr: *const u8, addr_len: usize) -> i32 
             Ok(Err(err)) => {
                 eprintln!("Server start error: {}", err);
                 // Clear shutdown_tx if bind failed
-                if let Ok(mut g) = state().lock() {
+                if let Ok(mut g) = state().write() {
                     g.shutdown_tx = None;
                 }
                 FFI_ERR_RUNTIME
@@ -193,7 +193,7 @@ pub extern "C" fn fmh_server_start(addr_ptr: *const u8, addr_len: usize) -> i32 
 #[unsafe(no_mangle)]
 pub extern "C" fn fmh_server_stop() -> i32 {
     let result = std::panic::catch_unwind(|| {
-        let mut guard = match state().lock() {
+        let mut guard = match state().write() {
             Ok(g) => g,
             Err(_) => return FFI_ERR_RUNTIME,
         };
@@ -245,7 +245,7 @@ pub extern "C" fn fmh_ws_broadcast(
         }
 
         {
-            let guard = match state().lock() {
+            let guard = match state().read() {
                 Ok(g) => g,
                 Err(_) => return FFI_ERR_RUNTIME,
             };

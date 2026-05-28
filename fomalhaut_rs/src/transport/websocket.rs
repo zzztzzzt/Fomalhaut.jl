@@ -6,7 +6,7 @@ use tokio_tungstenite::tungstenite::protocol::Message;
 use crate::runtime::state::state;
 
 pub fn route_exists(path: &str) -> bool {
-    match state().lock() {
+    match state().read() {
         Ok(guard) => guard.ws_routes.contains_key(path),
         Err(_) => false,
     }
@@ -18,7 +18,7 @@ pub async fn handle_socket(path: String, stream: TcpStream) {
     };
 
     let tx = {
-        let guard = match state().lock() {
+        let guard = match state().read() {
             Ok(g) => g,
             Err(_) => return,
         };

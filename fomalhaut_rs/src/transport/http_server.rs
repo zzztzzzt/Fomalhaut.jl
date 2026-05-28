@@ -106,7 +106,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
 
     let (resolution, _matched_pattern_path) = {
         let guard = state()
-            .lock()
+            .read()
             .map_err(|_| io::Error::other("Runtime lock failed"))?;
 
         let route_key = (method_upper.clone(), normalized_path.clone());
@@ -196,7 +196,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
             write_response(&mut stream, status, content_type, message.as_bytes(), origin, allow_methods.as_deref(), allow_headers).await?;
         }
         RouteResolution::Native(entity) => {
-            let db = state().lock().map_err(|_| io::Error::other("Runtime lock failed"))?.db.clone();
+            let db = state().read().map_err(|_| io::Error::other("Runtime lock failed"))?.db.clone();
 
             match db {
                 Some(conn) => {
@@ -473,7 +473,7 @@ async fn write_response(
 
 fn resolve_allow_origin(origin: Option<&str>) -> io::Result<Option<String>> {
     let guard = state()
-        .lock()
+        .read()
         .map_err(|_| io::Error::other("Runtime lock failed"))?;
 
     if guard.allowed_origins.is_empty() {
@@ -517,7 +517,7 @@ fn match_dynamic_path(pattern: &str, actual: &str) -> bool {
 fn allowed_methods_for_path(path: &str) -> io::Result<Option<String>> {
     let mut methods: Vec<String> = {
         let guard = state()
-            .lock()
+            .read()
             .map_err(|_| io::Error::other("Runtime lock failed"))?;
 
         guard

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ffi::c_void;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use tokio::sync::{oneshot, watch};
 
@@ -40,8 +40,8 @@ impl ServerState {
     }
 }
 
-static SERVER_STATE: OnceLock<Mutex<ServerState>> = OnceLock::new();
+static SERVER_STATE: OnceLock<RwLock<ServerState>> = OnceLock::new();
 
-pub fn state() -> &'static Mutex<ServerState> {
-    SERVER_STATE.get_or_init(|| Mutex::new(ServerState::stopped()))
+pub fn state() -> &'static RwLock<ServerState> {
+    SERVER_STATE.get_or_init(|| RwLock::new(ServerState::stopped()))
 }

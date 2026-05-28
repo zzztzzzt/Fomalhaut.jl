@@ -40,7 +40,7 @@ pub extern "C" fn fmh_register_http(
             path.pop();
         }
 
-        let mut guard = match state().lock() {
+        let mut guard = match state().write() {
             Ok(g) => g,
             Err(_) => return FFI_ERR_RUNTIME,
         };
@@ -84,7 +84,7 @@ pub extern "C" fn fmh_register_websocket(path_ptr: *const u8, path_len: usize) -
             _ => return FFI_ERR_INVALID_ROUTE,
         };
 
-        let mut guard = match state().lock() {
+        let mut guard = match state().write() {
             Ok(g) => g,
             Err(_) => return FFI_ERR_RUNTIME,
         };
@@ -136,7 +136,7 @@ pub extern "C" fn fmh_register_native_route(
             _ => return FFI_ERR_INVALID_ROUTE,
         };
 
-        let mut guard = match state().lock() {
+        let mut guard = match state().write() {
             Ok(g) => g,
             Err(_) => return FFI_ERR_RUNTIME,
         };
