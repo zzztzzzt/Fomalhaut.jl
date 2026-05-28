@@ -11,6 +11,44 @@ use crate::runtime::state::state;
 use crate::transport;
 
 #[unsafe(no_mangle)]
+pub extern "C" fn fmh_set_allowed_origins(origins_ptr: *const u8, origins_len: usize) -> i32 {
+    let result = std::panic::catch_unwind(|| {
+        if origins_ptr.is_null() && origins_len != 0 {
+            return FFI_ERR_NULL_PTR;
+        }
+
+        let origins_bytes = if origins_len == 0 {
+            &[][..]
+        } else {
+            unsafe { std::slice::from_raw_parts(origins_ptr, origins_len) }
+        };
+        let origins_raw = match std::str::from_utf8(origins_bytes) {
+            Ok(v) => v,
+            Err(_) => return FFI_ERR_INVALID_UTF8,
+        };
+
+        let origins = origins_raw
+            .lines()
+            .map(str::trim)
+            .filter(|origin| !origin.is_empty())
+            .map(str::to_string)
+            .collect();
+
+        let mut guard = match state().lock() {
+            Ok(g) => g,
+            Err(_) => return FFI_ERR_RUNTIME,
+        };
+        guard.allowed_origins = origins;
+        FFI_OK
+    });
+
+    match result {
+        Ok(code) => code,
+        Err(_) => FFI_ERR_PANIC,
+    }
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn fmh_db_connect(url_ptr: *const u8, url_len: usize) -> i32 {
     let result = std::panic::catch_unwind(|| {
         if url_ptr.is_null() {
@@ -168,6 +206,7 @@ pub extern "C" fn fmh_server_stop() -> i32 {
 
         guard.http_routes.clear();
         guard.ws_routes.clear();
+        guard.allowed_origins.clear();
 
         FFI_OK
     });

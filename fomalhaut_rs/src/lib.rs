@@ -6,7 +6,7 @@ pub mod transport;
 
 pub use ffi::{
     FfiHttpResponse, HttpCallback, fmh_register_http, fmh_register_post, fmh_register_websocket,
-    fmh_server_start, fmh_server_stop, fmh_ws_broadcast,
+    fmh_server_start, fmh_server_stop, fmh_set_allowed_origins, fmh_ws_broadcast,
 };
 
 #[cfg(test)]

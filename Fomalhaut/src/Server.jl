@@ -159,7 +159,29 @@ function connect_db(url::AbstractString)
     return nothing
 end
 
-function serve(app::App; host::AbstractString = "127.0.0.1", port::Integer = 8080, fps::Real = 30)
+function _set_allowed_origins!(allowed_origins::AbstractVector{<:AbstractString})
+    origins = String.(allowed_origins)
+    any(origin -> occursin('\n', origin) || occursin('\r', origin), origins) && error("CORS origins must not contain newlines")
+
+    origins_bytes = Vector{UInt8}(codeunits(join(origins, "\n")))
+    status = ccall(
+        (:fmh_set_allowed_origins, _load_rust_lib()),
+        Cint,
+        (Ptr{UInt8}, Csize_t),
+        origins_bytes,
+        length(origins_bytes),
+    )
+    _check_ffi_status(status, "set_allowed_origins")
+    return nothing
+end
+
+function serve(
+    app::App;
+    host::AbstractString = "127.0.0.1",
+    port::Integer = 8080,
+    fps::Real = 30,
+    allowed_origins::AbstractVector{<:AbstractString} = String[],
+)
     try
         AsciiArt.print_fomalhaut_ascii_art()
     catch err
@@ -175,6 +197,7 @@ function serve(app::App; host::AbstractString = "127.0.0.1", port::Integer = 808
     _active_app[] = app
     push!(app.handler_refs, _ensure_http_callback())
     _register_routes!(app)
+    _set_allowed_origins!(allowed_origins)
 
     _server_running[] = true
     
