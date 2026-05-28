@@ -268,30 +268,41 @@ async fn read_http_request(stream: TcpStream) -> io::Result<ParsedRequest> {
 }
 
 async fn read_http_request_inner(mut stream: TcpStream) -> io::Result<ParsedRequest> {
-    let mut buffer = Vec::new();
-    while find_headers_end(&buffer).is_none() {
+    // Pre-allocated buffer capacity
+    let mut buffer = Vec::with_capacity(8192); 
+    let headers_end;
+
+    loop {
         if buffer.len() >= HEADER_READ_LIMIT {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Request headers too large"));
         }
 
-        let mut chunk = [0_u8; 2048];
-        let read = stream.read(&mut chunk).await?;
+        let current_len = buffer.len();
+        
+        // Ensure sufficient extra space is reserved for this read ( maximum 4KB per read )
+        buffer.resize(current_len + 4096, 0_u8);
+        
+        let read = stream.read(&mut buffer[current_len..]).await?;
+        
         if read == 0 {
             return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Request ended before headers completed"));
         }
-        buffer.extend_from_slice(&chunk[..read]);
+        
+        // Correct the actual length of the buffer and cut off any unread spaces
+        buffer.truncate(current_len + read);
+
+        if let Some(idx) = find_headers_end(&buffer) {
+            headers_end = idx;
+            break;
+        }
     }
 
-    let headers_end = find_headers_end(&buffer).unwrap();
     let head = parse_request_head(&buffer[..headers_end])
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid request head"))?;
     
     if let Some(te) = head.headers.get("transfer-encoding") {
         if te.to_ascii_lowercase().contains("chunked") {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "chunked transfer-encoding not supported",
-            ));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "chunked transfer-encoding not supported"));
         }
     }
 
@@ -305,17 +316,33 @@ async fn read_http_request_inner(mut stream: TcpStream) -> io::Result<ParsedRequ
         return Err(io::Error::new(io::ErrorKind::InvalidData, "Request body too large"));
     }
 
+    // Phase Two : Reading the Body
     let expected_len = headers_end + content_length;
+    
+    // Precisely expand the buffer to the required maximum capacity in one go
+    // This way, regardless of whether the Body is 10KB or 10MB, the underlying memory configuration will only be triggered once
+    if buffer.len() < expected_len {
+        buffer.reserve(expected_len - buffer.len());
+    }
+
     while buffer.len() < expected_len {
-        let mut chunk = [0_u8; 4096];
-        let read = stream.read(&mut chunk).await?;
+        let current_len = buffer.len();
+        let to_read = (expected_len - current_len).min(16384);
+        
+        buffer.resize(current_len + to_read, 0_u8);
+        let read = stream.read(&mut buffer[current_len..]).await?;
         if read == 0 {
             return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "Request ended before body completed"));
         }
-        buffer.extend_from_slice(&chunk[..read]);
+        buffer.truncate(current_len + read);
     }
 
-    let body = buffer[headers_end..expected_len].to_vec();
+    let mut entire_buffer = buffer;
+    if entire_buffer.len() > expected_len {
+        entire_buffer.truncate(expected_len);
+    }
+    let body = entire_buffer.split_off(headers_end);
+
     Ok(ParsedRequest {
         stream,
         method: head.method,
