@@ -1,3 +1,5 @@
+//! Manually Validated by zzztzzzt-SakuraAxis 2026-05-28
+
 use std::collections::HashMap;
 use std::io;
 
@@ -16,7 +18,7 @@ pub async fn run_until_shutdown(addr: &str, shutdown_rx: tokio::sync::oneshot::R
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .expect("Failed to bind HTTP server");
-    println!("Fomalhaut Server: http://{}", addr);
+    println!("Fomalhaut Server : http://{}", addr);
 
     run_with_listener(listener, shutdown_rx).await;
 }
@@ -36,7 +38,7 @@ pub async fn run_with_listener(listener: tokio::net::TcpListener, mut shutdown_r
                         });
                     }
                     Err(err) => {
-                        eprintln!("Accept failed: {}", err);
+                        eprintln!("Accept failed : {}", err);
                     }
                 }
             }
@@ -80,7 +82,7 @@ async fn handle_connection_inner(mut stream: TcpStream) -> io::Result<()> {
                 _ => (500, &b"Internal Server Error"[..]),
             };
 
-            eprintln!("Request read error ({}): {}", status, e);
+            eprintln!("Request read error ({}) : {}", status, e);
             return Ok(());
         }
     };
@@ -97,7 +99,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
 
     let mut stream = request.stream;
 
-    let method_upper = request.method.to_ascii_uppercase();
+    let method_upper = request.method.as_str();
     
     let mut normalized_path = request.path.clone();
     if normalized_path.len() > 1 && normalized_path.ends_with('/') {
@@ -109,7 +111,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
             .read()
             .map_err(|_| io::Error::other("Runtime lock failed"))?;
 
-        let route_key = (method_upper.clone(), normalized_path.clone());
+        let route_key = (method_upper.to_string(), normalized_path.clone());
 
         if let Some(route) = guard.http_routes.get(&route_key) {
             (RouteResolution::Handler(*route), Some(normalized_path.clone()))
@@ -119,7 +121,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
             let mut found = None;
             
             for ((m, p), entity) in &guard.native_routes {
-                if m == &method_upper && match_dynamic_path(p, &normalized_path) {
+                if m == method_upper && match_dynamic_path(p, &normalized_path) {
                     found = Some((RouteResolution::Native(entity.clone()), Some(p.clone())));
                     break;
                 }
@@ -127,7 +129,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
 
             if found.is_none() {
                 for ((m, p), route) in &guard.http_routes {
-                    if m == &method_upper && match_dynamic_path(p, &normalized_path) {
+                    if m == method_upper && match_dynamic_path(p, &normalized_path) {
                         found = Some((RouteResolution::Handler(*route), Some(p.clone())));
                         break;
                     }
@@ -291,8 +293,13 @@ async fn read_http_request_inner(mut stream: TcpStream) -> io::Result<ParsedRequ
         // Correct the actual length of the buffer and cut off any unread spaces
         buffer.truncate(current_len + read);
 
-        if let Some(idx) = find_headers_end(&buffer) {
-            headers_end = idx;
+        let search_start = current_len.saturating_sub(3);
+
+        if let Some(idx) = buffer[search_start..]
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+        {
+            headers_end = search_start + idx + 4;
             break;
         }
     }
@@ -301,7 +308,10 @@ async fn read_http_request_inner(mut stream: TcpStream) -> io::Result<ParsedRequ
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Invalid request head"))?;
     
     if let Some(te) = head.headers.get("transfer-encoding") {
-        if te.to_ascii_lowercase().contains("chunked") {
+        if te
+            .split(',')
+            .any(|v| v.trim().eq_ignore_ascii_case("chunked"))
+        {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "chunked transfer-encoding not supported"));
         }
     }
@@ -387,7 +397,7 @@ fn parse_request_head(preview: &[u8]) -> Option<RequestHead> {
     let mut lines = header_text.split("\r\n");
     let request_line = lines.next()?;
     let mut request_parts = request_line.split_whitespace();
-    let method = request_parts.next()?.to_string();
+    let method = request_parts.next()?.to_ascii_uppercase();
     let target = request_parts.next()?.to_string();
     let _version = request_parts.next()?;
 
@@ -527,22 +537,22 @@ fn resolve_allow_origin(origin: Option<&str>) -> io::Result<Option<String>> {
 }
 
 fn match_dynamic_path(pattern: &str, actual: &str) -> bool {
-    let p_parts: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
-    let a_parts: Vec<&str> = actual.split('/').filter(|s| !s.is_empty()).collect();
+    let mut p_parts = pattern.split('/').filter(|s| !s.is_empty());
+    let mut a_parts = actual.split('/').filter(|s| !s.is_empty());
 
-    if p_parts.len() != a_parts.len() {
-        return false;
-    }
+    loop {
+        match (p_parts.next(), a_parts.next()) {
+            (None, None) => return true,
 
-    for (p, a) in p_parts.iter().zip(a_parts.iter()) {
-        if p.starts_with(':') {
-            continue;
-        }
-        if p != a {
-            return false;
+            (Some(p), Some(a)) => {
+                if !p.starts_with(':') && p != a {
+                    return false;
+                }
+            }
+
+            _ => return false,
         }
     }
-    true
 }
 
 fn allowed_methods_for_path(path: &str) -> io::Result<Option<String>> {
