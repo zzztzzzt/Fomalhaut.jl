@@ -464,7 +464,11 @@ async fn write_response(
     let status_text = reason_phrase(status_code);
     let allow_origin = resolve_allow_origin(origin)?;
     
-    let mut header = format!(
+    let mut header = Vec::with_capacity(512);
+    use std::io::Write as _;
+    
+    write!(
+        &mut header,
         "HTTP/1.1 {} {}\r\n\
          Server: Fomalhaut/0.2 (Rust/Julia)\r\n\
          Content-Type: {}\r\n\
@@ -474,28 +478,28 @@ async fn write_response(
         status_text,
         content_type,
         body.len(),
-    );
+    )?;
 
     if let Some(origin) = allow_origin {
-        header.push_str(&format!("Access-Control-Allow-Origin: {}\r\n", origin));
+        write!(&mut header, "Access-Control-Allow-Origin: {}\r\n", origin)?;
         if origin != "*" {
-            header.push_str("Vary: Origin\r\n");
+            header.extend_from_slice(b"Vary: Origin\r\n");
         }
     }
-    header.push_str(&format!(
+    write!(
+        &mut header,
         "Access-Control-Allow-Methods: {}\r\n",
         allow_methods.unwrap_or("GET, OPTIONS")
-    ));
-    header.push_str(&format!(
-        "Access-Control-Allow-Headers: {}\r\n",
+    )?;
+    write!(
+        &mut header,
+        "Access-Control-Allow-Headers: {}\r\n\r\n",
         allow_headers.unwrap_or("Content-Type, Authorization, X-Custom-Header, X-Requested-With")
-    ));
+    )?;
 
-    header.push_str("\r\n");
-
-    stream.write_all(header.as_bytes()).await?;
+    stream.write_all(&header).await?;
     stream.write_all(body).await?;
-    stream.flush().await
+    Ok(())
 }
 
 fn resolve_allow_origin(origin: Option<&str>) -> io::Result<Option<String>> {
