@@ -592,6 +592,10 @@ fn resolve_allow_origin(origin: Option<&str>) -> io::Result<Option<String>> {
         .map_err(|_| io::Error::other("Runtime lock failed"))?;
 
     if guard.allowed_origins.is_empty() {
+        return Ok(None);
+    }
+
+    if guard.allowed_origins.iter().any(|allowed| allowed == "*") {
         return Ok(Some("*".to_string()));
     }
 

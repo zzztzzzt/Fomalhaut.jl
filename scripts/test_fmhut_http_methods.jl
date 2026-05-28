@@ -62,7 +62,7 @@ end
 
 # Server Start
 println("Fomalhaut Methods Test Server starting on http://127.0.0.1:8080")
-FMHUT.serve(app; port=8080)
+FMHUT.serve(app; port=8080, allowed_origins=["*"])
 
 #=
 Frontend Usage Examples :
