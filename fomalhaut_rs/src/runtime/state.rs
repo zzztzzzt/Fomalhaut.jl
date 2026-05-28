@@ -24,6 +24,7 @@ pub struct ServerState {
     pub native_routes: HashMap<(String, String), String>,
     pub db: Option<sea_orm::DatabaseConnection>,
     pub shutdown_tx: Option<oneshot::Sender<()>>,
+    pub allowed_origins: Vec<String>,
 }
 
 impl ServerState {
@@ -34,6 +35,7 @@ impl ServerState {
             native_routes: HashMap::new(),
             db: None,
             shutdown_tx: None,
+            allowed_origins: Vec::new(),
         }
     }
 }

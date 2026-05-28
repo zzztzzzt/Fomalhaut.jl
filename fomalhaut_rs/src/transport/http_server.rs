@@ -545,11 +545,12 @@ async fn write_response(
     status_code: u16,
     content_type: &str,
     body: &[u8],
-    _origin: Option<&str>,
+    origin: Option<&str>,
     allow_methods: Option<&str>,
     allow_headers: Option<&str>,
 ) -> io::Result<()> {
     let status_text = reason_phrase(status_code);
+    let allow_origin = resolve_allow_origin(origin)?;
     
     let mut header = format!(
         "HTTP/1.1 {} {}\r\n\
@@ -563,7 +564,12 @@ async fn write_response(
         body.len(),
     );
 
-    header.push_str("Access-Control-Allow-Origin: *\r\n");
+    if let Some(origin) = allow_origin {
+        header.push_str(&format!("Access-Control-Allow-Origin: {}\r\n", origin));
+        if origin != "*" {
+            header.push_str("Vary: Origin\r\n");
+        }
+    }
     header.push_str(&format!(
         "Access-Control-Allow-Methods: {}\r\n",
         allow_methods.unwrap_or("GET, OPTIONS")
@@ -572,13 +578,32 @@ async fn write_response(
         "Access-Control-Allow-Headers: {}\r\n",
         allow_headers.unwrap_or("Content-Type, Authorization, X-Custom-Header, X-Requested-With")
     ));
-    header.push_str("Vary: Origin\r\n");
 
     header.push_str("\r\n");
 
     stream.write_all(header.as_bytes()).await?;
     stream.write_all(body).await?;
     stream.flush().await
+}
+
+fn resolve_allow_origin(origin: Option<&str>) -> io::Result<Option<String>> {
+    let guard = state()
+        .lock()
+        .map_err(|_| io::Error::other("Runtime lock failed"))?;
+
+    if guard.allowed_origins.is_empty() {
+        return Ok(Some("*".to_string()));
+    }
+
+    let Some(origin) = origin else {
+        return Ok(None);
+    };
+
+    if guard.allowed_origins.iter().any(|allowed| allowed == origin) {
+        Ok(Some(origin.to_string()))
+    } else {
+        Ok(None)
+    }
 }
 
 fn match_dynamic_path(pattern: &str, actual: &str) -> bool {
