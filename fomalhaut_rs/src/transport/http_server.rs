@@ -58,7 +58,7 @@ async fn handle_connection_inner(mut stream: TcpStream) -> io::Result<()> {
     let request_head = match peek_request_head(&stream).await {
         Ok(Some(head)) => head,
         Ok(None) => {
-            write_simple_response(&mut stream, 400, "text/plain", b"Bad Request", None, None, None).await?;
+            write_response(&mut stream, 400, "text/plain", b"Bad Request", None, None, None).await?;
             return Ok(());
         }
         Err(e) => {
@@ -136,7 +136,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
                     .await
                 }
                 Err(_) => {
-                    write_simple_response(
+                    write_response(
                         &mut stream,
                         500,
                         "application/json",
@@ -151,7 +151,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
         }
 
         if allow_methods.is_none() {
-            return write_simple_response(
+            return write_response(
                 &mut stream,
                 404,
                 "application/json",
@@ -254,7 +254,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
             } else {
                 None
             };
-            write_simple_response(
+            write_response(
                 &mut stream,
                 status,
                 content_type,
@@ -296,7 +296,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
                         }
                         Err(err) => {
                             let err_msg = format!(r#"{{"error":"Native handler failed","details":"{}"}}"#, err);
-                            write_simple_response(
+                            write_response(
                                 &mut stream,
                                 500,
                                 "application/json",
@@ -310,7 +310,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
                     }
                 }
                 None => {
-                    write_simple_response(
+                    write_response(
                         &mut stream,
                         503,
                         "application/json",
@@ -346,7 +346,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
                     .await?;
                 }
                 Err(_) => {
-                    write_simple_response(
+                    write_response(
                         &mut stream,
                         500,
                         "application/json",
@@ -538,18 +538,6 @@ fn serialize_headers(headers: &HashMap<String, String>) -> Vec<u8> {
         serialized.extend_from_slice(b"\r\n");
     }
     serialized
-}
-
-async fn write_simple_response(
-    stream: &mut TcpStream,
-    status_code: u16,
-    content_type: &str,
-    body: &[u8],
-    origin: Option<&str>,
-    allow_methods: Option<&str>,
-    allow_headers: Option<&str>,
-) -> io::Result<()> {
-    write_response(stream, status_code, content_type, body, origin, allow_methods, allow_headers).await
 }
 
 async fn write_response(
