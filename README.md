@@ -131,7 +131,7 @@ end
 
 # Server Start
 println("Fomalhaut Methods Test Server starting on http://127.0.0.1:8080")
-FMHUT.serve(app; port=8080)
+FMHUT.serve(app; port=8080, allowed_origins=["*"])
 ```
 
 ## Specialized Native Routes ( SeaORM )
@@ -195,7 +195,7 @@ FMHUT.connect_db("sqlite://fomalhaut_demo.db")
 println("Fomalhaut : Native SeaORM routes registered")
 println("Server starting at http://127.0.0.1:8080")
 
-FMHUT.serve(app; port=8080)
+FMHUT.serve(app; port=8080, allowed_origins=["*"])
 ```
 
 ### Running the Benchmark Test
