@@ -1,3 +1,5 @@
+# Manually Validated by zzztzzzt-SakuraAxis 2026-05-29
+
 const _RUST_LIB_FILENAME =
     Sys.iswindows() ? "fomalhaut_rs.dll" :
     Sys.isapple()   ? "libfomalhaut_rs.dylib" :
@@ -46,7 +48,7 @@ end
 
 @noinline function _throw_ffi_error(status::Integer, context::AbstractString)
     msg = _ffi_error_message(status)
-    error("$(context) failed with status $(status): $(msg)")
+    error("$(context) failed with status $(status) : $(msg)")
 end
 
 @inline function _check_ffi_status(status::Integer, context::AbstractString)
@@ -154,8 +156,8 @@ end
     _find_handler_with_params(app, method, path) -> (handler | nothing, params)
 
 Look up the handler for `(method, path)` with two-phase matching :
-1. Exact match  — O(1), no allocation
-2. Dynamic scan — checks registered patterns for `:param` segments
+1. Exact match - O(1), no allocation
+2. Dynamic scan - checks registered patterns for `:param` segments
 """
 function _find_handler_with_params(app::App, method::String, path::String)
     # Phase 1 : Exact match ( most common case, zero overhead )
