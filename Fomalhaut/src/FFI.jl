@@ -170,10 +170,10 @@ function _http_request_trampoline(
 )::Cint
     try
         app = _active_app_or_throw()
-        method = String(copy(unsafe_wrap(Vector{UInt8}, method_ptr, Int(method_len))))
-        path = String(copy(unsafe_wrap(Vector{UInt8}, path_ptr, Int(path_len))))
-        query = String(copy(unsafe_wrap(Vector{UInt8}, query_ptr, Int(query_len))))
-        headers_raw = String(copy(unsafe_wrap(Vector{UInt8}, headers_ptr, Int(headers_len))))
+        method = unsafe_string(method_ptr, method_len)
+        path = unsafe_string(path_ptr, path_len)
+        query = unsafe_string(query_ptr, query_len)
+        headers_raw = unsafe_string(headers_ptr, headers_len)
         body = copy(unsafe_wrap(Vector{UInt8}, body_ptr, Int(body_len)))
 
         handler, path_params = _find_handler_with_params(app, method, path)
