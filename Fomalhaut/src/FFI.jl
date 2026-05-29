@@ -106,10 +106,28 @@ Check if `actual` path matches `pattern` that may contain `:param` segments.
 Example : _match_dynamic_path("/v1/users/:id", "/v1/users/user-123") -> true
 """
 function _match_dynamic_path(pattern::String, actual::String)::Bool
-    p_parts = filter(!isempty, split(pattern, "/"))
-    a_parts = filter(!isempty, split(actual, "/"))
-    length(p_parts) != length(a_parts) && return false
-    return all(((p, a),) -> startswith(p, ":") || p == a, zip(p_parts, a_parts))
+    p_it = eachsplit(pattern, '/'; keepempty=false)
+    a_it = eachsplit(actual, '/'; keepempty=false)
+    p_state = iterate(p_it)
+    a_state = iterate(a_it)
+
+    while true
+        if p_state === nothing && a_state === nothing
+            return true
+        elseif p_state === nothing || a_state === nothing
+            return false
+        end
+
+        p_seg, p_next = p_state
+        a_seg, a_next = a_state
+
+        if !startswith(p_seg, ':') && p_seg != a_seg
+            return false
+        end
+
+        p_state = iterate(p_it, p_next)
+        a_state = iterate(a_it, a_next)
+    end
 end
 
 """
@@ -120,13 +138,18 @@ Example : _extract_path_params("/v1/users/:id", "/v1/users/user-123") -> Dict("i
 """
 function _extract_path_params(pattern::String, actual::String)::Dict{String, String}
     params = Dict{String, String}()
-    p_parts = filter(!isempty, split(pattern, "/"))
-    a_parts = filter(!isempty, split(actual, "/"))
-    for (p, a) in zip(p_parts, a_parts)
-        if startswith(p, ":")
-            params[p[2:end]] = a   # strip the leading ':'
+    a_it = eachsplit(actual, '/'; keepempty=false)
+    a_state = iterate(a_it)
+
+    for p_seg in eachsplit(pattern, '/'; keepempty=false)
+        a_state === nothing && break
+        a_seg, a_next = a_state
+        if startswith(p_seg, ':')
+            params[String(p_seg[2:end])] = String(a_seg)
         end
+        a_state = iterate(a_it, a_next)
     end
+
     return params
 end
 
