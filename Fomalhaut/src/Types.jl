@@ -11,6 +11,10 @@ const _active_app = Ref{Any}(nothing)
 const _active_app_id = Ref(0)
 const _http_callback_ptr = Ref{Ptr{Cvoid}}(C_NULL)
 
+function _ensure_http_callback()
+    return _http_callback_ptr[]
+end
+
 struct Request
     method::String
     path::String

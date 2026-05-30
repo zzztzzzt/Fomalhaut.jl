@@ -175,6 +175,70 @@ function _set_allowed_origins!(allowed_origins::AbstractVector{<:AbstractString}
     return nothing
 end
 
+function _handle_http_task(data::FFIHttpTaskData)
+    try
+        app = _active_app_or_throw()
+
+        method = unsafe_string(data.method_ptr, data.method_len)
+        path = unsafe_string(data.path_ptr, data.path_len)
+        query = unsafe_string(data.query_ptr, data.query_len)
+        headers_raw = unsafe_string(data.headers_ptr, data.headers_len)
+        body = copy(unsafe_wrap(Vector{UInt8}, data.body_ptr, Int(data.body_len)))
+
+        handler, path_params = _find_handler_with_params(app, method, path)
+
+        if handler === nothing
+            err_body, err_len = _malloc_copy(Vector{UInt8}(codeunits("Not Found")))
+            err_ct, err_ct_len = _malloc_copy(Vector{UInt8}(codeunits("text/plain")))
+            _complete_task(data.task_handle, UInt16(404), err_body, err_len, err_ct, err_ct_len)
+            return
+        end
+
+        request = Request(method, path, _parse_headers(headers_raw), query, body, path_params)
+        handler_result = handler(request)
+
+        res_body, res_ct, res_status = if handler_result isa Tuple
+            b = length(handler_result) >= 1 ? handler_result[1] : UInt8[]
+            ct = length(handler_result) >= 2 ? handler_result[2] : "text/plain"
+            st = length(handler_result) >= 3 ? handler_result[3] : UInt16(200)
+            b, ct, st
+        else
+            handler_result, "text/plain", UInt16(200)
+        end
+
+        final_body = Vector{UInt8}(copy(res_body))
+        body_ptr_out, body_len_out = _malloc_copy(final_body)
+        ct_bytes = Vector{UInt8}(codeunits(String(res_ct)))
+        ct_ptr_out, ct_len_out = _malloc_copy(ct_bytes)
+
+        _complete_task(data.task_handle, UInt16(res_status), body_ptr_out, body_len_out, ct_ptr_out, ct_len_out)
+
+    catch err
+        @error "Fomalhaut HTTP task handler failed" exception=(err, catch_backtrace())
+        try
+            err_body, err_len = _malloc_copy(Vector{UInt8}(codeunits("Internal Server Error")))
+            err_ct, err_ct_len = _malloc_copy(Vector{UInt8}(codeunits("text/plain")))
+            _complete_task(data.task_handle, UInt16(500), err_body, err_len, err_ct, err_ct_len)
+        catch inner_err
+            @error "Failed to send 500 response" exception=inner_err
+        end
+    end
+end
+
+function _complete_task(task_ptr, status_code, body_ptr, body_len, ct_ptr, ct_len)
+    ccall(
+        (:fmh_complete_http_task, _load_rust_lib()),
+        Cint,
+        (Ptr{Cvoid}, UInt16, Ptr{UInt8}, Csize_t, Ptr{UInt8}, Csize_t),
+        task_ptr,
+        status_code,
+        body_ptr,
+        body_len,
+        ct_ptr,
+        ct_len,
+    )
+end
+
 function serve(
     app::App;
     host::AbstractString = "127.0.0.1",
@@ -195,7 +259,6 @@ function serve(
     addr = "$(host):$(port)"
     addr_bytes = Vector{UInt8}(codeunits(addr))
     _active_app[] = app
-    push!(app.handler_refs, _ensure_http_callback())
     _register_routes!(app)
     _set_allowed_origins!(allowed_origins)
 
@@ -219,7 +282,21 @@ function serve(
 
     try
         while _server_running[]
-            sleep(0.1)
+            task_data = Ref(FFIHttpTaskData(
+                C_NULL, 0, C_NULL, 0, C_NULL, 0, C_NULL, 0, C_NULL, 0, C_NULL
+            ))
+            status = ccall(
+                (:fmh_poll_http_task, _load_rust_lib()),
+                Cint,
+                (Ptr{FFIHttpTaskData},),
+                task_data,
+            )
+
+            if status == 11 # FFI_OK_WITH_TASK
+                _handle_http_task(task_data[])
+            else
+                sleep(0.001)
+            end
         end
     catch err
         if err isa InterruptException

@@ -1,4 +1,4 @@
-//! Manually Validated by zzztzzzt-SakuraAxis 2026-05-28
+//! Manually Validated by zzztzzzt-SakuraAxis 2026-05-30
 
 use std::collections::HashMap;
 use std::io;
@@ -6,7 +6,7 @@ use std::io;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use crate::ffi::callbacks::invoke_http_callback;
+use crate::ffi::callbacks::CallbackResponse;
 use crate::runtime::state::{HttpRoute, state};
 use crate::transport::websocket;
 
@@ -90,6 +90,36 @@ async fn handle_connection_inner(mut stream: TcpStream) -> io::Result<()> {
     handle_http_request(request).await
 }
 
+async fn invoke_via_channel(
+    route: HttpRoute,
+    method: Vec<u8>,
+    path: Vec<u8>,
+    query: Vec<u8>,
+    headers: Vec<u8>,
+    body: Vec<u8>,
+) -> Result<Result<CallbackResponse, i32>, ()> {
+    let (response_tx, response_rx) = tokio::sync::oneshot::channel();
+
+    let task = crate::ffi::callbacks::HttpTask {
+        route,
+        method,
+        path,
+        query,
+        headers,
+        body,
+        response_tx,
+    };
+
+    let tx = {
+        let guard = state().read().map_err(|_| ())?;
+        guard.http_task_tx.clone().ok_or(())?
+    };
+
+    tx.send(task).await.map_err(|_| ())?;
+
+    response_rx.await.map_err(|_| ())
+}
+
 async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
     let origin = request.headers.get("origin").map(|s| s.as_str());
     let allow_headers = request
@@ -166,10 +196,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
             let query_bytes = request.query.as_bytes().to_vec();
             let header_bytes = serialize_headers(&request.headers);
 
-            let callback_result = tokio::task::spawn_blocking(move || {
-                invoke_http_callback(route, &method_bytes, &path_bytes, &query_bytes, &header_bytes, &body)
-            })
-            .await
+            let callback_result = invoke_via_channel(route, method_bytes, path_bytes, query_bytes, header_bytes, body).await
             .map_err(|_| io::Error::other("Callback task failed"))?;
 
             return match callback_result {
@@ -224,10 +251,7 @@ async fn handle_http_request(request: ParsedRequest) -> io::Result<()> {
             let query_bytes = request.query.as_bytes().to_vec();
             let header_bytes = serialize_headers(&request.headers);
 
-            let callback_result = tokio::task::spawn_blocking(move || {
-                invoke_http_callback(route, &method_bytes, &path_bytes, &query_bytes, &header_bytes, &body)
-            })
-            .await
+            let callback_result = invoke_via_channel(route, method_bytes, path_bytes, query_bytes, header_bytes, body).await
             .map_err(|_| io::Error::other("Callback task failed"))?;
 
             match callback_result {

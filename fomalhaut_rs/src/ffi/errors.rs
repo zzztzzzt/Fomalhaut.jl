@@ -9,3 +9,5 @@ pub const FFI_ERR_RUNTIME: i32 = 6;
 pub const FFI_ERR_INVALID_FRAME: i32 = 7;
 pub const FFI_ERR_INVALID_ROUTE: i32 = 8;
 pub const FFI_ERR_CALLBACK_FAILED: i32 = 9;
+pub const FFI_ERR_NOT_READY: i32 = 10; // No pending tasks
+pub const FFI_OK_WITH_TASK: i32 = 11; // There is a task; the information has been entered
