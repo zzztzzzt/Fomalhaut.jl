@@ -10,6 +10,7 @@ use crate::protocol::envelope::validate_envelope;
 use crate::runtime::state::state;
 use crate::transport;
 use crate::ffi::callbacks::CallbackResponse;
+use crate::runtime::state::{set_http_notifier, clear_http_notifier, HttpNotifierCb};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn fmh_set_allowed_origins(origins_ptr: *const u8, origins_len: usize) -> i32 {
@@ -209,6 +210,7 @@ pub extern "C" fn fmh_server_stop() -> i32 {
         }
 
         guard.http_task_tx = None;
+        clear_http_notifier();
         guard.http_routes.clear();
         guard.ws_routes.clear();
         guard.allowed_origins.clear();
@@ -267,6 +269,35 @@ pub extern "C" fn fmh_ws_broadcast(
         FFI_OK
     });
 
+    match result {
+        Ok(code) => code,
+        Err(_) => FFI_ERR_PANIC,
+    }
+}
+
+/// Register a Julia AsyncCondition notifier.
+/// Julia passes a C function pointer and a `uv_async_t*` handle.
+/// Rust calls `cb(handle)` after each HTTP task is pushed onto the channel,
+/// which causes `uv_async_send` to wake up the Julia event loop.
+///
+/// Call this before `fmh_server_start`. Calling again replaces the old notifier.
+#[unsafe(no_mangle)]
+pub extern "C" fn fmh_set_http_notifier(
+    cb: Option<HttpNotifierCb>,
+    handle: *mut std::ffi::c_void,
+) -> i32 {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        match cb {
+            Some(f) => {
+                set_http_notifier(f, handle);
+                FFI_OK
+            }
+            None => {
+                clear_http_notifier();
+                FFI_OK
+            }
+        }
+    }));
     match result {
         Ok(code) => code,
         Err(_) => FFI_ERR_PANIC,

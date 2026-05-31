@@ -10,6 +10,10 @@ const _server_running = Ref(false)
 const _active_app = Ref{Any}(nothing)
 const _active_app_id = Ref(0)
 const _http_callback_ptr = Ref{Ptr{Cvoid}}(C_NULL)
+# AsyncCondition used to wake the polling loop without sleep(0.001)
+const _http_notifier_cond = Ref{Any}(nothing) # holds AsyncCondition to prevent GC
+const _http_notifier_cb = Ref{Any}(nothing) # GC-roots the @cfunction trampoline
+const _http_inflight = Threads.Atomic{Int}(0)
 
 function _ensure_http_callback()
     return _http_callback_ptr[]

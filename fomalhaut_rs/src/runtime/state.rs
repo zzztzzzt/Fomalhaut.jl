@@ -1,10 +1,14 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock, RwLock, Mutex};
 
 use tokio::sync::{oneshot, watch, mpsc};
 
 use crate::ffi::callbacks::HttpCallback;
 use crate::ffi::callbacks::HttpTask;
+
+/// C function pointer type for waking up Julia's AsyncCondition
+pub type HttpNotifierCb = unsafe extern "C" fn(*mut std::ffi::c_void);
 
 pub type WsFrame = Arc<Vec<u8>>;
 pub type WsSender = watch::Sender<WsFrame>;
@@ -66,4 +70,32 @@ pub fn try_recv_http_task() -> Option<HttpTask> {
     let lock = HTTP_TASK_RX.get()?;
     let mut guard = lock.lock().ok()?;
     guard.try_recv().ok()
+}
+
+// Notifier : fast path without holding RwLock
+// Store the callback and handle as atomics so invoke_via_channel can fire
+// the notifier cheaply without acquiring the state RwLock.
+static HTTP_NOTIFIER_CB: AtomicUsize = AtomicUsize::new(0);
+static HTTP_NOTIFIER_HANDLE: AtomicUsize = AtomicUsize::new(0);
+
+pub fn set_http_notifier(cb: HttpNotifierCb, handle: *mut std::ffi::c_void) {
+    HTTP_NOTIFIER_CB.store(cb as usize, Ordering::Release);
+    HTTP_NOTIFIER_HANDLE.store(handle as usize, Ordering::Release);
+}
+
+pub fn clear_http_notifier() {
+    HTTP_NOTIFIER_CB.store(0, Ordering::Release);
+    HTTP_NOTIFIER_HANDLE.store(0, Ordering::Release);
+}
+
+/// Trigger the Julia AsyncCondition notifier if one has been registered.
+/// Safe to call from any thread; does nothing if notifier is not set.
+pub fn notify_julia() {
+    let cb_ptr = HTTP_NOTIFIER_CB.load(Ordering::SeqCst);
+    let handle_ptr = HTTP_NOTIFIER_HANDLE.load(Ordering::SeqCst);
+
+    if cb_ptr != 0 && handle_ptr != 0 {
+        let cb: HttpNotifierCb = unsafe { std::mem::transmute(cb_ptr as *const ()) };
+        unsafe { cb(handle_ptr as *mut std::ffi::c_void) };
+    }
 }

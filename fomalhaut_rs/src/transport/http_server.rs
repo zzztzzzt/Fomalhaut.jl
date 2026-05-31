@@ -116,6 +116,7 @@ async fn invoke_via_channel(
     };
 
     tx.send(task).await.map_err(|_| ())?;
+    crate::runtime::state::notify_julia();
 
     response_rx.await.map_err(|_| ())
 }

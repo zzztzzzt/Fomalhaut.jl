@@ -175,6 +175,28 @@ function _set_allowed_origins!(allowed_origins::AbstractVector{<:AbstractString}
     return nothing
 end
 
+function _http_inflight_count()
+    # atomic_add!(x, 0) returns the previous value; atomic_load is not in all Julia versions
+    return Threads.atomic_add!(_http_inflight, 0)
+end
+
+function _wait_http_handlers!()
+    while _http_inflight_count() > 0
+        yield()
+    end
+    return nothing
+end
+
+function _spawn_http_handler!(data::FFIHttpTaskData)
+    Threads.atomic_add!(_http_inflight, 1)
+    Threads.@spawn try
+        _handle_http_task(data)
+    finally
+        Threads.atomic_sub!(_http_inflight, 1)
+    end
+    return nothing
+end
+
 function _handle_http_task(data::FFIHttpTaskData)
     try
         app = _active_app_or_throw()
@@ -237,6 +259,7 @@ function _complete_task(task_ptr, status_code, body_ptr, body_len, ct_ptr, ct_le
         ct_ptr,
         ct_len,
     )
+    return nothing
 end
 
 function serve(
@@ -262,6 +285,26 @@ function serve(
     _register_routes!(app)
     _set_allowed_origins!(allowed_origins)
 
+    # AsyncCondition notifier : Rust wakes the poll loop via uv_async_send ( no sleep polling )
+    cond = Base.AsyncCondition()
+    _http_notifier_cond[] = cond
+
+    # NOTE : uv_async_send is thread-safe; DO NOT call any other Julia API in this callback
+    notify_cb = @cfunction(
+        (handle::Ptr{Cvoid}) -> (ccall(:uv_async_send, Cint, (Ptr{Cvoid},), handle); nothing),
+        Cvoid, (Ptr{Cvoid},)
+    )
+    _http_notifier_cb[] = notify_cb
+
+    notifier_status = ccall(
+        (:fmh_set_http_notifier, _load_rust_lib()),
+        Cint,
+        (Ptr{Cvoid}, Ptr{Cvoid}),
+        notify_cb,
+        cond.handle,
+    )
+    _check_ffi_status(notifier_status, "fmh_set_http_notifier")
+
     _server_running[] = true
     
     # Start Rust server ( now returns immediately after binding )
@@ -281,21 +324,33 @@ function serve(
     _start_ws_tasks!(app; fps = fps)
 
     try
+        cond = _http_notifier_cond[]
         while _server_running[]
-            task_data = Ref(FFIHttpTaskData(
-                C_NULL, 0, C_NULL, 0, C_NULL, 0, C_NULL, 0, C_NULL, 0, C_NULL
-            ))
-            status = ccall(
-                (:fmh_poll_http_task, _load_rust_lib()),
-                Cint,
-                (Ptr{FFIHttpTaskData},),
-                task_data,
-            )
+            # Drain loop
+            # After each wakeup ( or at startup ), exhaust ALL pending tasks before
+            # going back to wait(). This is mandatory because uv_async_send
+            # coalesces multiple signals : 5 rapid requests may only fire 1 wakeup
+            drained = false
+            while !drained && _server_running[]
+                task_data = Ref(FFIHttpTaskData(
+                    C_NULL, 0, C_NULL, 0, C_NULL, 0, C_NULL, 0, C_NULL, 0, C_NULL
+                ))
+                status = ccall(
+                    (:fmh_poll_http_task, _load_rust_lib()),
+                    Cint,
+                    (Ptr{FFIHttpTaskData},),
+                    task_data,
+                )
 
-            if status == 11 # FFI_OK_WITH_TASK
-                _handle_http_task(task_data[])
-            else
-                sleep(0.001)
+                if status == 11 # FFI_OK_WITH_TASK
+                    _spawn_http_handler!(task_data[])
+                else
+                    drained = true # Channel empty; exit inner loop
+                end
+            end
+
+            if _server_running[]
+                wait(cond)
             end
         end
     catch err
@@ -321,6 +376,16 @@ function stop_server!()
     if status != 5
         _check_ffi_status(status, "stop_server!")
     end
+
+    # Unblock the main loop's wait( cond ) so it can observe _server_running[] == false
+    cond = _http_notifier_cond[]
+    if cond isa Base.AsyncCondition
+        ccall(:uv_async_send, Cint, (Ptr{Cvoid},), cond.handle)
+    end
+    _wait_http_handlers!()
+
+    _http_notifier_cond[] = nothing
+    _http_notifier_cb[]   = nothing
 
     if app isa App
         _stop_ws_tasks!(app)
