@@ -97,6 +97,20 @@ function _active_app_or_throw()
     return app::App
 end
 
+struct HTTPBadRequest <: Exception
+    message::String
+end
+
+Base.showerror(io::IO, err::HTTPBadRequest) = print(io, err.message)
+
+function _coerce_param(name::String, value, target_type::DataType)
+    try
+        return target_type === String ? String(value) : parse(target_type, String(value))
+    catch err
+        throw(HTTPBadRequest("Invalid value for parameter '$name'. Expected $(target_type)."))
+    end
+end
+
 """
     _match_dynamic_path(pattern, actual) -> Bool
 
@@ -155,13 +169,76 @@ function _coerce_path_params(raw_params::Dict{String, String}, param_types::Dict
     typed = Dict{String, Any}()
     for (name, value) in raw_params
         target_type = get(param_types, name, String)
-        typed[name] = target_type === String ? value : parse(target_type, value)
+        typed[name] = _coerce_param(name, value, target_type)
     end
     return typed
 end
 
+function _decode_query_component(value::AbstractString)::String
+    bytes = UInt8[]
+    i = firstindex(value)
+    while i <= lastindex(value)
+        c = value[i]
+        if c == '+'
+            push!(bytes, UInt8(' '))
+            i = nextind(value, i)
+        elseif c == '%'
+            ncodeunits(value) - i + 1 >= 3 || throw(HTTPBadRequest("Invalid percent-encoding in query string."))
+            j = nextind(value, i)
+            k = nextind(value, j)
+            hex = String(value[j:k])
+            parsed = tryparse(UInt8, hex; base=16)
+            if parsed === nothing
+                throw(HTTPBadRequest("Invalid percent-encoding in query string."))
+            end
+            push!(bytes, parsed)
+            i = nextind(value, k)
+        else
+            append!(bytes, codeunits(string(c)))
+            i = nextind(value, i)
+        end
+    end
+    return String(bytes)
+end
+
+function _parse_query_string(query::String)::Dict{String, String}
+    params = Dict{String, String}()
+    isempty(query) && return params
+
+    for part in eachsplit(query, '&'; keepempty=false)
+        key_raw, value_raw = if occursin('=', part)
+            split(part, '='; limit=2)
+        else
+            (part, "")
+        end
+        key = _decode_query_component(key_raw)
+        isempty(key) && continue
+        params[key] = _decode_query_component(value_raw)
+    end
+
+    return params
+end
+
+function _coerce_query_params(query::String, specs::Vector{QueryParamSpec})::Dict{String, Any}
+    typed = Dict{String, Any}()
+    isempty(specs) && return typed
+
+    raw_params = _parse_query_string(query)
+    for spec in specs
+        if haskey(raw_params, spec.name)
+            typed[spec.name] = _coerce_param(spec.name, raw_params[spec.name], spec.typ)
+        elseif spec.required
+            throw(HTTPBadRequest("Missing required query parameter '$(spec.name)'."))
+        else
+            typed[spec.name] = spec.default
+        end
+    end
+
+    return typed
+end
+
 """
-    _find_handler_with_params(app, method, path) -> (handler | nothing, params)
+    _find_handler_with_params(app, method, path) -> (handler | nothing, path_params, query_specs)
 
 Look up the handler for `(method, path)` with two-phase matching :
 1. Exact match - O(1), no allocation
@@ -169,9 +246,11 @@ Look up the handler for `(method, path)` with two-phase matching :
 """
 function _find_handler_with_params(app::App, method::String, path::String)
     # Phase 1 : Exact match ( most common case, zero overhead )
-    handler = get(app.http_routes, (method, path), nothing)
+    route_key = (method, path)
+    handler = get(app.http_routes, route_key, nothing)
     if handler !== nothing
-        return handler, Dict{String, Any}()
+        query_specs = get(app.http_route_query_params, route_key, QueryParamSpec[])
+        return handler, Dict{String, Any}(), query_specs
     end
 
     # Phase 2 : Dynamic pattern scan
@@ -179,11 +258,12 @@ function _find_handler_with_params(app::App, method::String, path::String)
         if m == method && _match_dynamic_path(pattern, path)
             raw_params = _extract_path_params(pattern, path)
             param_types = get(app.http_route_param_types, (m, pattern), Dict{String, DataType}())
-            return h, _coerce_path_params(raw_params, param_types)
+            query_specs = get(app.http_route_query_params, (m, pattern), QueryParamSpec[])
+            return h, _coerce_path_params(raw_params, param_types), query_specs
         end
     end
 
-    return nothing, Dict{String, Any}()
+    return nothing, Dict{String, Any}(), QueryParamSpec[]
 end
 
 struct FFIHttpTaskData

@@ -26,6 +26,20 @@ struct Request
     query::String
     body::Vector{UInt8}
     params::Dict{String, Any} # Path parameters extracted and type-coerced from dynamic segments
+    query_params::Dict{String, Any} # Query parameters extracted and type-coerced from the URL query string
+end
+
+struct QueryParamSpec
+    name::String
+    typ::DataType
+    required::Bool
+    default::Any
+end
+
+struct RouteSpec
+    path::String
+    param_types::Vector{Pair{String, DataType}}
+    query_params::Vector{QueryParamSpec}
 end
 
 struct WebSocketContext
@@ -37,6 +51,7 @@ end
 mutable struct App
     http_routes::Dict{Tuple{String, String}, Function}
     http_route_param_types::Dict{Tuple{String, String}, Dict{String, DataType}}
+    http_route_query_params::Dict{Tuple{String, String}, Vector{QueryParamSpec}}
     ws_routes::Dict{String, Function}
     native_routes::Dict{Tuple{String, String}, String}
     native_route_param_types::Dict{Tuple{String, String}, Dict{String, DataType}}
@@ -50,6 +65,7 @@ function App()
     return App(
         Dict{Tuple{String, String}, Function}(),
         Dict{Tuple{String, String}, Dict{String, DataType}}(),
+        Dict{Tuple{String, String}, Vector{QueryParamSpec}}(),
         Dict{String, Function}(),
         Dict{Tuple{String, String}, String}(),
         Dict{Tuple{String, String}, Dict{String, DataType}}(),

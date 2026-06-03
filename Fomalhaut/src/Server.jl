@@ -207,7 +207,7 @@ function _handle_http_task(data::FFIHttpTaskData)
         headers_raw = unsafe_string(data.headers_ptr, data.headers_len)
         body = copy(unsafe_wrap(Vector{UInt8}, data.body_ptr, Int(data.body_len)))
 
-        handler, path_params = _find_handler_with_params(app, method, path)
+        handler, path_params, query_specs = _find_handler_with_params(app, method, path)
 
         if handler === nothing
             err_body, err_len = _malloc_copy(Vector{UInt8}(codeunits("Not Found")))
@@ -216,7 +216,8 @@ function _handle_http_task(data::FFIHttpTaskData)
             return
         end
 
-        request = Request(method, path, _parse_headers(headers_raw), query, body, path_params)
+        query_params = _coerce_query_params(query, query_specs)
+        request = Request(method, path, _parse_headers(headers_raw), query, body, path_params, query_params)
         handler_result = handler(request)
 
         res_body, res_ct, res_status = if handler_result isa Tuple
@@ -238,9 +239,11 @@ function _handle_http_task(data::FFIHttpTaskData)
     catch err
         @error "Fomalhaut HTTP task handler failed" exception=(err, catch_backtrace())
         try
-            err_body, err_len = _malloc_copy(Vector{UInt8}(codeunits("Internal Server Error")))
+            status = err isa HTTPBadRequest ? UInt16(400) : UInt16(500)
+            message = err isa HTTPBadRequest ? err.message : "Internal Server Error"
+            err_body, err_len = _malloc_copy(Vector{UInt8}(codeunits(message)))
             err_ct, err_ct_len = _malloc_copy(Vector{UInt8}(codeunits("text/plain")))
-            _complete_task(data.task_handle, UInt16(500), err_body, err_len, err_ct, err_ct_len)
+            _complete_task(data.task_handle, status, err_body, err_len, err_ct, err_ct_len)
         catch inner_err
             @error "Failed to send 500 response" exception=inner_err
         end
