@@ -12,9 +12,6 @@ const MOCK_DB = Dict("user-123" => "Nora", "user-456" => "Alexander")
 end
 
 @FMHUT.get app @FMHUT.route("/v1/orgs/users", org_id::Int, user_id::String) begin
-    org_id = req.params["org_id"]::Int
-    user_id = req.params["user_id"]::String
-
     if haskey(MOCK_DB, user_id)
         response_text = "org=$org_id user=$user_id name=$(MOCK_DB[user_id])"
         return (Vector{UInt8}(response_text), "text/plain", 200)
@@ -32,43 +29,39 @@ end
 end
 
 @FMHUT.put app @FMHUT.route("/v1/users", id::String) begin
-    user_id = req.params["id"]::String
     new_name = String(copy(req.body))
 
-    if haskey(MOCK_DB, user_id)
-        MOCK_DB[user_id] = new_name
-        response_text = "User $user_id replaced. New name : $new_name"
+    if haskey(MOCK_DB, id)
+        MOCK_DB[id] = new_name
+        response_text = "User $id replaced. New name : $new_name"
         return (Vector{UInt8}(response_text), "text/plain", 200)
     else
-        MOCK_DB[user_id] = new_name
-        response_text = "User $user_id created with name : $new_name"
+        MOCK_DB[id] = new_name
+        response_text = "User $id created with name : $new_name"
         return (Vector{UInt8}(response_text), "text/plain", 201)
     end
 end
 
 @FMHUT.patch app @FMHUT.route("/v1/users", id::String) begin
-    user_id = req.params["id"]::String
     new_name = String(copy(req.body))
 
-    if haskey(MOCK_DB, user_id)
-        old_name = MOCK_DB[user_id]
-        MOCK_DB[user_id] = new_name
-        response_text = "User $user_id updated. $old_name -> $new_name"
+    if haskey(MOCK_DB, id)
+        old_name = MOCK_DB[id]
+        MOCK_DB[id] = new_name
+        response_text = "User $id updated. $old_name -> $new_name"
         return (Vector{UInt8}(response_text), "text/plain", 200)
     else
-        return (Vector{UInt8}("Error : User $user_id not found."), "text/plain", 404)
+        return (Vector{UInt8}("Error : User $id not found."), "text/plain", 404)
     end
 end
 
 @FMHUT.delete app @FMHUT.route("/v1/users", id::String) begin
-    user_id = req.params["id"]::String
-
-    if haskey(MOCK_DB, user_id)
-        delete!(MOCK_DB, user_id)
-        response_text = "User $user_id deleted. Remaining user(s) : $(length(MOCK_DB))"
+    if haskey(MOCK_DB, id)
+        delete!(MOCK_DB, id)
+        response_text = "User $id deleted. Remaining user(s) : $(length(MOCK_DB))"
         return (Vector{UInt8}(response_text), "text/plain", 200)
     else
-        return (Vector{UInt8}("Error : User $user_id not found."), "text/plain", 404)
+        return (Vector{UInt8}("Error : User $id not found."), "text/plain", 404)
     end
 end
 

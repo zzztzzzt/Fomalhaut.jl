@@ -90,41 +90,67 @@ function register_websocket!(app::App, path::AbstractString, handler::Function)
     return app
 end
 
+function _route_macro_params(path_expr)
+    path_expr isa Expr || return Pair{Symbol, Any}[]
+    path_expr.head == :macrocall || return Pair{Symbol, Any}[]
+    macro_name = string(path_expr.args[1])
+    occursin("@route", macro_name) || return Pair{Symbol, Any}[]
+
+    params = Pair{Symbol, Any}[]
+    for p in path_expr.args[3:end]
+        p isa LineNumberNode && continue
+        if p isa Expr && p.head == :(::) && length(p.args) == 2 && p.args[1] isa Symbol
+            push!(params, (p.args[1]::Symbol) => p.args[2])
+        end
+    end
+    return params
+end
+
+function _build_handler_macro(__module__, app_expr, path_expr, body_expr, register_fn)
+    params = _route_macro_params(path_expr)
+
+    bindings = Any[
+        :(local $(name) = req.params[$(String(name))]::$(typ))
+        for (name, typ) in params
+    ]
+
+    handler = if isempty(bindings)
+        :((req) -> $(body_expr))
+    else
+        :((req) -> begin
+            $(bindings...)
+            $(body_expr)
+        end)
+    end
+
+    return quote
+        $(register_fn)($(app_expr), $(path_expr), $(handler))
+    end |> esc
+end
+
 # Macros
 macro get(app, path, f)
-    return esc(quote
-        $(@__MODULE__).register_get!($app, $path, (req) -> $f)
-    end)
+    return _build_handler_macro(__module__, app, path, f, :($(@__MODULE__).register_get!))
 end
 
 macro post(app, path, f)
-    return esc(quote
-        $(@__MODULE__).register_post!($app, $path, (req) -> $f)
-    end)
+    return _build_handler_macro(__module__, app, path, f, :($(@__MODULE__).register_post!))
 end
 
 macro put(app, path, f)
-    return esc(quote
-        $(@__MODULE__).register_put!($app, $path, (req) -> $f)
-    end)
+    return _build_handler_macro(__module__, app, path, f, :($(@__MODULE__).register_put!))
 end
 
 macro patch(app, path, f)
-    return esc(quote
-        $(@__MODULE__).register_patch!($app, $path, (req) -> $f)
-    end)
+    return _build_handler_macro(__module__, app, path, f, :($(@__MODULE__).register_patch!))
 end
 
 macro delete(app, path, f)
-    return esc(quote
-        $(@__MODULE__).register_delete!($app, $path, (req) -> $f)
-    end)
+    return _build_handler_macro(__module__, app, path, f, :($(@__MODULE__).register_delete!))
 end
 
 macro options(app, path, f)
-    return esc(quote
-        $(@__MODULE__).register_options!($app, $path, (req) -> $f)
-    end)
+    return _build_handler_macro(__module__, app, path, f, :($(@__MODULE__).register_options!))
 end
 
 macro websocket(app, path, f)
