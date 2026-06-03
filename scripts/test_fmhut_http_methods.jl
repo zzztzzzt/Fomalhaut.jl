@@ -11,6 +11,18 @@ const MOCK_DB = Dict("user-123" => "Nora", "user-456" => "Alexander")
     return (Vector{UInt8}(response_text), "text/plain", 200)
 end
 
+@FMHUT.get app @FMHUT.route("/v1/orgs/users", org_id::Int, user_id::String) begin
+    org_id = req.params["org_id"]::Int
+    user_id = req.params["user_id"]::String
+
+    if haskey(MOCK_DB, user_id)
+        response_text = "org=$org_id user=$user_id name=$(MOCK_DB[user_id])"
+        return (Vector{UInt8}(response_text), "text/plain", 200)
+    else
+        return (Vector{UInt8}("Error : User $user_id not found in org $org_id."), "text/plain", 404)
+    end
+end
+
 @FMHUT.post app "/v1/echo" begin
     return (copy(req.body), "application/json", 201)
 end
@@ -19,8 +31,8 @@ end
     return (UInt8[], "text/plain", 204)
 end
 
-@FMHUT.put app "/v1/users/:id" begin
-    user_id  = req.params["id"]
+@FMHUT.put app @FMHUT.route("/v1/users", id::String) begin
+    user_id = req.params["id"]::String
     new_name = String(copy(req.body))
 
     if haskey(MOCK_DB, user_id)
@@ -34,8 +46,8 @@ end
     end
 end
 
-@FMHUT.patch app "/v1/users/:id" begin
-    user_id  = req.params["id"]
+@FMHUT.patch app @FMHUT.route("/v1/users", id::String) begin
+    user_id = req.params["id"]::String
     new_name = String(copy(req.body))
 
     if haskey(MOCK_DB, user_id)
@@ -48,8 +60,8 @@ end
     end
 end
 
-@FMHUT.delete app "/v1/users/:id" begin
-    user_id = req.params["id"]
+@FMHUT.delete app @FMHUT.route("/v1/users", id::String) begin
+    user_id = req.params["id"]::String
 
     if haskey(MOCK_DB, user_id)
         delete!(MOCK_DB, user_id)
@@ -70,31 +82,36 @@ Frontend Usage Examples :
 // Step 1. GET all users
 fetch("http://127.0.0.1:8080/v1/users").then(res => res.text()).then(data => console.log("GET all :", data));
 
-// Step 2. POST Echo Test
+// Step 2. GET Multi Params Route ( org_id + user_id )
+fetch("http://127.0.0.1:8080/v1/orgs/users/7/user-123")
+  .then(res => res.text())
+  .then(data => console.log("GET multi params :", data));
+
+// Step 3. POST Echo Test
 fetch("http://127.0.0.1:8080/v1/echo", {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ message: "Hello Fomalhaut!" })
 }).then(res => res.json()).then(data => console.log("POST Echo :", data));
 
-// Step 3. PUT Test ( replace user-456 )
+// Step 4. PUT Test ( replace user-456 )
 fetch("http://127.0.0.1:8080/v1/users/user-456", {
   method: "PUT",
   body: "Joseph"
 }).then(res => res.text()).then(data => console.log("PUT :", data));
 
-// Step 4. PATCH Test ( update user-123 )
+// Step 5. PATCH Test ( update user-123 )
 fetch("http://127.0.0.1:8080/v1/users/user-123", {
   method: "PATCH",
   body: "Layla"
 }).then(res => res.text()).then(data => console.log("PATCH :", data));
 
-// Step 5. DELETE Test ( delete user-456 )
+// Step 6. DELETE Test ( delete user-456 )
 fetch("http://127.0.0.1:8080/v1/users/user-456", {
   method: "DELETE"
 }).then(res => res.text()).then(data => console.log("DELETE :", data));
 
-// Step 6. OPTIONS Test ( Preflight )
+// Step 7. OPTIONS Test ( Preflight )
 fetch("http://127.0.0.1:8080/v1/echo", {
   method: "OPTIONS",
   headers: {

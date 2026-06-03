@@ -151,6 +151,15 @@ function _extract_path_params(pattern::String, actual::String)::Dict{String, Str
     return params
 end
 
+function _coerce_path_params(raw_params::Dict{String, String}, param_types::Dict{String, DataType})::Dict{String, Any}
+    typed = Dict{String, Any}()
+    for (name, value) in raw_params
+        target_type = get(param_types, name, String)
+        typed[name] = target_type === String ? value : parse(target_type, value)
+    end
+    return typed
+end
+
 """
     _find_handler_with_params(app, method, path) -> (handler | nothing, params)
 
@@ -162,17 +171,19 @@ function _find_handler_with_params(app::App, method::String, path::String)
     # Phase 1 : Exact match ( most common case, zero overhead )
     handler = get(app.http_routes, (method, path), nothing)
     if handler !== nothing
-        return handler, Dict{String, String}()
+        return handler, Dict{String, Any}()
     end
 
     # Phase 2 : Dynamic pattern scan
     for ((m, pattern), h) in app.http_routes
         if m == method && _match_dynamic_path(pattern, path)
-            return h, _extract_path_params(pattern, path)
+            raw_params = _extract_path_params(pattern, path)
+            param_types = get(app.http_route_param_types, (m, pattern), Dict{String, DataType}())
+            return h, _coerce_path_params(raw_params, param_types)
         end
     end
 
-    return nothing, Dict{String, String}()
+    return nothing, Dict{String, Any}()
 end
 
 struct FFIHttpTaskData

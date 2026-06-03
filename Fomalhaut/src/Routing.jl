@@ -1,44 +1,88 @@
+struct RouteSpec
+    path::String
+    param_types::Vector{Pair{String, DataType}}
+end
+
 function _validate_path(path::AbstractString)
     startswith(path, "/") || error("path must start with '/'")
     occursin("*", path) && error("wildcard routes are not supported in v0.2")
-    return path
+    return String(path)
 end
 
-function register_http!(app::App, method::AbstractString, path::AbstractString, handler::Function)
+function _normalize_params(params)
+    if params isa Pair
+        return [_normalize_single_param(params)]
+    elseif params isa Tuple || params isa AbstractVector
+        isempty(params) && return Pair{String, DataType}[]
+        return [_normalize_single_param(p) for p in params]
+    else
+        error("invalid route params format. Use Pair or tuple/vector of Pair{Symbol,DataType}.")
+    end
+end
+
+function _normalize_single_param(param::Pair)
+    key, typ = param
+    key isa Symbol || error("route param name must be a Symbol, got $(typeof(key))")
+    typ isa DataType || error("route param type must be a DataType, got $(typeof(typ))")
+    return String(key) => typ
+end
+
+function _to_route_spec(pathspec)::RouteSpec
+    if pathspec isa AbstractString
+        return RouteSpec(_validate_path(pathspec), Pair{String, DataType}[])
+    elseif pathspec isa Pair
+        base, params = pathspec
+        base isa AbstractString || error("route base path must be AbstractString")
+        normalized_base = _validate_path(base)
+        normalized_params = _normalize_params(params)
+        dynamic_path = isempty(normalized_params) ? normalized_base : string(normalized_base, "/", join((":" * name for (name, _) in normalized_params), "/"))
+        return RouteSpec(dynamic_path, normalized_params)
+    else
+        error("invalid route declaration. Use \"/path\" for static routes or \"/path\" => (:id => Int) for dynamic routes.")
+    end
+end
+
+function register_http!(app::App, method::AbstractString, pathspec, handler::Function)
     normalized_method = uppercase(String(method))
-    app.http_routes[(normalized_method, String(_validate_path(path)))] = handler
+    spec = _to_route_spec(pathspec)
+    route_key = (normalized_method, spec.path)
+    app.http_routes[route_key] = handler
+    app.http_route_param_types[route_key] = Dict(spec.param_types)
     return app
 end
 
-function register_sea_http!(app::App, method::AbstractString, path::AbstractString, entity::AbstractString)
+function register_sea_http!(app::App, method::AbstractString, pathspec, entity::AbstractString)
     normalized_method = uppercase(String(method))
-    app.native_routes[(normalized_method, String(_validate_path(path)))] = String(entity)
+    spec = _to_route_spec(pathspec)
+    route_key = (normalized_method, spec.path)
+    app.native_routes[route_key] = String(entity)
+    app.native_route_param_types[route_key] = Dict(spec.param_types)
     return app
 end
 
 # Methods wrappers
-function register_get!(app::App, path::AbstractString, handler::Function)
-    return register_http!(app, "GET", path, handler)
+function register_get!(app::App, pathspec, handler::Function)
+    return register_http!(app, "GET", pathspec, handler)
 end
 
-function register_post!(app::App, path::AbstractString, handler::Function)
-    return register_http!(app, "POST", path, handler)
+function register_post!(app::App, pathspec, handler::Function)
+    return register_http!(app, "POST", pathspec, handler)
 end
 
-function register_put!(app::App, path::AbstractString, handler::Function)
-    return register_http!(app, "PUT", path, handler)
+function register_put!(app::App, pathspec, handler::Function)
+    return register_http!(app, "PUT", pathspec, handler)
 end
 
-function register_patch!(app::App, path::AbstractString, handler::Function)
-    return register_http!(app, "PATCH", path, handler)
+function register_patch!(app::App, pathspec, handler::Function)
+    return register_http!(app, "PATCH", pathspec, handler)
 end
 
-function register_delete!(app::App, path::AbstractString, handler::Function)
-    return register_http!(app, "DELETE", path, handler)
+function register_delete!(app::App, pathspec, handler::Function)
+    return register_http!(app, "DELETE", pathspec, handler)
 end
 
-function register_options!(app::App, path::AbstractString, handler::Function)
-    return register_http!(app, "OPTIONS", path, handler)
+function register_options!(app::App, pathspec, handler::Function)
+    return register_http!(app, "OPTIONS", pathspec, handler)
 end
 
 function register_websocket!(app::App, path::AbstractString, handler::Function)
@@ -118,4 +162,25 @@ macro sea_delete(app, path, entity)
     return esc(quote
         $(@__MODULE__).register_sea_http!($app, "DELETE", $path, $entity)
     end)
+end
+
+macro route(path, params...)
+    if isempty(params)
+        return esc(path)
+    end
+
+    pairs_expr = Vector{Any}(undef, length(params))
+    for (i, p) in enumerate(params)
+        if !(p isa Expr && p.head == :(::) && length(p.args) == 2 && p.args[1] isa Symbol)
+            throw(ArgumentError("@route params must use `name::Type`, e.g. @route(\"/v1/users\", id::Int)"))
+        end
+        name = p.args[1]::Symbol
+        typ  = p.args[2]
+
+        pairs_expr[i] = Expr(:call, :(=>), QuoteNode(name), typ)
+    end
+
+    params_expr = length(pairs_expr) == 1 ? pairs_expr[1] : Expr(:tuple, pairs_expr...)
+
+    return esc(Expr(:call, :(=>), path, params_expr))
 end

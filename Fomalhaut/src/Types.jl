@@ -25,7 +25,7 @@ struct Request
     headers::Dict{String, String}
     query::String
     body::Vector{UInt8}
-    params::Dict{String, String} # Path parameters extracted from dynamic segments ( e.g. :id )
+    params::Dict{String, Any} # Path parameters extracted and type-coerced from dynamic segments
 end
 
 struct WebSocketContext
@@ -36,8 +36,10 @@ end
 
 mutable struct App
     http_routes::Dict{Tuple{String, String}, Function}
+    http_route_param_types::Dict{Tuple{String, String}, Dict{String, DataType}}
     ws_routes::Dict{String, Function}
     native_routes::Dict{Tuple{String, String}, String}
+    native_route_param_types::Dict{Tuple{String, String}, Dict{String, DataType}}
     handler_refs::Vector{Any}
     ws_tasks::Vector{Task}
     id::Int
@@ -46,11 +48,13 @@ end
 function App()
     _active_app_id[] += 1
     return App(
-        Dict{Tuple{String, String}, Function}(), 
-        Dict{String, Function}(), 
+        Dict{Tuple{String, String}, Function}(),
+        Dict{Tuple{String, String}, Dict{String, DataType}}(),
+        Dict{String, Function}(),
         Dict{Tuple{String, String}, String}(),
-        Any[], 
-        Task[], 
+        Dict{Tuple{String, String}, Dict{String, DataType}}(),
+        Any[],
+        Task[],
         _active_app_id[]
     )
 end

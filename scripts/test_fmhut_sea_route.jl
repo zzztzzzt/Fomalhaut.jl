@@ -37,11 +37,11 @@ create_demo_schema()
 FMHUT.connect_db("sqlite://fomalhaut_demo.db")
 
 # Register Rust native routes
-@FMHUT.sea_get app "/api/v1/users/:id" "users"
+@FMHUT.sea_get app @FMHUT.route("/api/v1/users", id::Int) "users"
 @FMHUT.sea_post app "/api/v1/users" "users"
-@FMHUT.sea_put app "/api/v1/users/:id" "users"
-@FMHUT.sea_patch app "/api/v1/users/:id" "users"
-@FMHUT.sea_delete app "/api/v1/users/:id" "users"
+@FMHUT.sea_put app @FMHUT.route("/api/v1/users", id::Int) "users"
+@FMHUT.sea_patch app @FMHUT.route("/api/v1/users", id::Int) "users"
+@FMHUT.sea_delete app @FMHUT.route("/api/v1/users", id::Int) "users"
 
 println("Fomalhaut : Native SeaORM routes registered")
 println("Server starting at http://127.0.0.1:8080")
