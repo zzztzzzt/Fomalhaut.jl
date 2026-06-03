@@ -80,9 +80,13 @@ const MOCK_DB = Dict("user-123" => "Nora", "user-456" => "Alexander")
     return (Vector{UInt8}(response_text), "text/plain", 200)
 end
 
-@FMHUT.get app @FMHUT.route("/v1/orgs/users", org_id::Int, user_id::String) begin
+@FMHUT.get app @FMHUT.route("/v1/orgs/", org_id::Int,"/users/", user_id::String, Q(q::String = "123", limit::Int)) begin
+    if !contains(user_id, q)
+        return (Vector{UInt8}("Error : User ID '$user_id' does not match query filter '$q'."), "text/plain", 404)
+    end
+
     if haskey(MOCK_DB, user_id)
-        response_text = "org=$org_id user=$user_id name=$(MOCK_DB[user_id])"
+        response_text = "Found user $(MOCK_DB[user_id]) with ID $user_id in org $org_id (query: q=$q, limit=$limit)"
         return (Vector{UInt8}(response_text), "text/plain", 200)
     else
         return (Vector{UInt8}("Error : User $user_id not found in org $org_id."), "text/plain", 404)
