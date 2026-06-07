@@ -1,3 +1,5 @@
+[logo-design](https://github.com/SakuraAxis/Fomalhaut.jl/blob/main/logo/design.webp)
+
 # Fomalhaut.jl
 
 [![GitHub last commit](https://img.shields.io/github/last-commit/zzztzzzt/Fomalhaut.jl.svg)](https://github.com/zzztzzzt/Fomalhaut.jl)
@@ -5,7 +7,7 @@
 
 <br>
 
-<img src="https://github.com/zzztzzzt/Fomalhaut.jl/blob/main/logo/logo.webp" alt="fomalhaut-logo" style="height: 280px; width: auto;" />
+<img src="https://github.com/SakuraAxis/Fomalhaut.jl/blob/main/logo/logo.webp" alt="fomalhaut-logo" style="height: 280px; width: auto;" />
 
 ### Fomalhaut - Velocity Edge Defined By Us. - Web Framework for 3D / Physical Data Transmission.
 
