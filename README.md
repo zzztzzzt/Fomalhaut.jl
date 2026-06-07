@@ -1,4 +1,4 @@
-[logo-design](https://github.com/SakuraAxis/Fomalhaut.jl/blob/main/logo/design.webp)
+![logo-design](https://github.com/SakuraAxis/Fomalhaut.jl/blob/main/logo/design.webp)
 
 # Fomalhaut.jl
 
