@@ -1,5 +1,3 @@
-![logo-design](https://github.com/SakuraAxis/Fomalhaut.jl/blob/main/logo/design.webp)
-
 # Fomalhaut.jl
 
 [![GitHub last commit](https://img.shields.io/github/last-commit/zzztzzzt/Fomalhaut.jl.svg)](https://github.com/zzztzzzt/Fomalhaut.jl)
