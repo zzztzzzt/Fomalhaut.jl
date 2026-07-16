@@ -4,3 +4,7 @@ Manifest.toml
 # Demo DB
 fomalhaut_demo.db
 benchmark_test.db
+
+# Axis Dev Version Folder
+/Axis/
+/axis_rs/
